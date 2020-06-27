@@ -1,3 +1,4 @@
+use core::fmt;
 use core::ops;
 
 use volatile::Volatile;
@@ -63,5 +64,12 @@ impl Writer {
 
     fn new_line(&mut self) {
         todo!()
+    }
+}
+
+impl fmt::Write for Writer {
+    fn write_str(&mut self, string: &str) -> fmt::Result {
+        self.write_string(string);
+        Ok(())
     }
 }

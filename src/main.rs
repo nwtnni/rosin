@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 
+use core::fmt::Write as _;
 use core::panic;
 
 use rosin::vga;
@@ -32,4 +33,5 @@ pub extern "C" fn _start() {
     writer.write_byte(b'H');
     writer.write_string("ello! ");
     writer.write_string("Wörld!");
+    write!(writer, "The numbers are {} and {}", 42, 1.0/3.0).unwrap();
 }
