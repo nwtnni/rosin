@@ -11,7 +11,13 @@ pub enum T {
     Gray = 0x7,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+impl Default for T {
+    fn default() -> Self {
+        T::Black
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Fore {
     pub bright: bool,
     pub color: T,
@@ -23,7 +29,7 @@ impl From<Fore> for u8 {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Back {
     pub blink: bool,
     pub color: T,
@@ -36,7 +42,7 @@ impl From<Back> for u8 {
 }
 
 #[repr(transparent)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Code(u8);
 
 impl Code {

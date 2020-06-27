@@ -63,7 +63,25 @@ impl Writer {
     }
 
     fn new_line(&mut self) {
-        todo!()
+        for row in 1..HEIGHT {
+            for col in 0..WIDTH {
+                let char = self.buffer[row][col].read();
+                self.buffer[row - 1][col].write(char);
+            }
+        }
+        self.clear_row(HEIGHT - 1);
+        self.column = 0;
+    }
+
+    fn clear_row(&mut self, row: usize) {
+        let blank = Char {
+            ascii: b' ',
+            color: vga::color::Code::default(),
+        };
+
+        for col in 0..WIDTH {
+            self.buffer[row][col].write(blank);
+        }
     }
 }
 
