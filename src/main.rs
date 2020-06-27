@@ -3,6 +3,8 @@
 
 use core::panic;
 
+use rosin::vga;
+
 #[panic_handler]
 fn panic(_: &panic::PanicInfo) -> ! {
     loop {}
@@ -10,11 +12,24 @@ fn panic(_: &panic::PanicInfo) -> ! {
 
 #[no_mangle]
 pub extern "C" fn _start() {
-    let vga = 0x000B_8000 as *mut u8;
-    for (index, &byte) in b"Hello, world!".iter().enumerate() {
-        unsafe {
-            *vga.offset(index as isize * 2) = byte;
-            *vga.offset(index as isize * 2 + 1) = 0xB;
-        }
-    }
+    let mut writer = vga::screen::Writer {
+        column: 0,
+        color: vga::color::Code::new(
+            vga::color::Fore {
+                bright: false,
+                color: vga::color::T::Blue,
+            },
+            vga::color::Back {
+                blink: true,
+                color: vga::color::T::Red,
+            },
+        ),
+        buffer: unsafe {
+            &mut *(vga::ADDRESS as *mut vga::screen::Buffer)
+        },
+    };
+
+    writer.write_byte(b'H');
+    writer.write_string("ello! ");
+    writer.write_string("Wörld!");
 }
