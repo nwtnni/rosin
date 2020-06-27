@@ -13,25 +13,7 @@ fn panic(_: &panic::PanicInfo) -> ! {
 
 #[no_mangle]
 pub extern "C" fn _start() {
-    let mut writer = vga::screen::Writer {
-        column: 0,
-        color: vga::color::Code::new(
-            vga::color::Fore {
-                bright: false,
-                color: vga::color::T::Blue,
-            },
-            vga::color::Back {
-                blink: true,
-                color: vga::color::T::Red,
-            },
-        ),
-        buffer: unsafe {
-            &mut *(vga::ADDRESS as *mut vga::screen::Buffer)
-        },
-    };
-
-    writer.write_byte(b'H');
-    writer.write_string("ello! ");
-    writer.write_string("Wörld!\n");
-    write!(writer, "The numbers are {} and {}", 42, 1.0/3.0).unwrap();
+    let mut writer = vga::screen::WRITER.lock();
+    writeln!(writer, "Hello, wörld!").unwrap();
+    writeln!(writer, "The numbers are {} and {}", 42, 1.0/3.0).unwrap();
 }

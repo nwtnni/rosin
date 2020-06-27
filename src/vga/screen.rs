@@ -1,22 +1,38 @@
 use core::fmt;
 use core::ops;
 
+use lazy_static::lazy_static;
 use volatile::Volatile;
+use spin::Mutex;
 
-use crate::vga;
+use crate::vga::color;
+
+lazy_static! {
+    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
+        column: 0,
+        color: color::Code::new(
+            color::Fore {
+                bright: false,
+                color: color::T::Green,
+            },
+            color::Back::default(),
+        ),
+        buffer: unsafe { &mut *(0x000B_8000 as *mut Buffer) },
+    });
+}
 
 const HEIGHT: usize = 25;
 const WIDTH: usize = 80;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Char {
+struct Char {
     pub ascii: u8,
-    pub color: vga::color::Code,
+    pub color: color::Code,
 }
 
 #[repr(transparent)]
-pub struct Buffer([[Volatile<Char>; WIDTH]; HEIGHT]);
+struct Buffer([[Volatile<Char>; WIDTH]; HEIGHT]);
 
 impl ops::Index<usize> for Buffer {
     type Output = [Volatile<Char>];
@@ -32,19 +48,19 @@ impl ops::IndexMut<usize> for Buffer {
 }
 
 pub struct Writer {
-    pub column: usize,
-    pub color: vga::color::Code,
-    pub buffer: &'static mut Buffer,
+    column: usize,
+    color: color::Code,
+    buffer: &'static mut Buffer,
 }
 
 impl Writer {
-    pub fn write_string(&mut self, string: &str) {
+    fn write_string(&mut self, string: &str) {
         for byte in string.bytes() {
             self.write_byte(byte);
         }
     }
 
-    pub fn write_byte(&mut self, byte: u8) {
+    fn write_byte(&mut self, byte: u8) {
         let ascii = match byte {
         | b'\n' => return self.new_line(),
         | ascii @ 0x20..=0x7E => ascii,
@@ -76,7 +92,7 @@ impl Writer {
     fn clear_row(&mut self, row: usize) {
         let blank = Char {
             ascii: b' ',
-            color: vga::color::Code::default(),
+            color: color::Code::default(),
         };
 
         for col in 0..WIDTH {
