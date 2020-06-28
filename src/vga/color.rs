@@ -11,6 +11,10 @@ pub enum T {
     Gray = 0x7,
 }
 
+impl T {
+    pub const DEFAULT: Self = T::Black;
+}
+
 impl Default for T {
     fn default() -> Self {
         T::Black
@@ -21,6 +25,10 @@ impl Default for T {
 pub struct Fore {
     pub bright: bool,
     pub color: T,
+}
+
+impl Fore {
+    pub const DEFAULT: Self = Fore { bright: false, color: T::DEFAULT };
 }
 
 impl From<Fore> for u8 {
@@ -35,6 +43,10 @@ pub struct Back {
     pub color: T,
 }
 
+impl Back {
+    pub const DEFAULT: Self = Back { blink: false, color: T::DEFAULT };
+}
+
 impl From<Back> for u8 {
     fn from(back: Back) -> Self {
         (back.blink as u8) << 4 | (back.color as u8)
@@ -44,6 +56,10 @@ impl From<Back> for u8 {
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Code(u8);
+
+impl Code {
+    pub const DEFAULT: Self = Code(0);
+}
 
 impl Code {
     pub fn new(fore: Fore, back: Back) -> Self {

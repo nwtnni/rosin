@@ -1,6 +1,7 @@
 use core::fmt;
 use core::fmt::Write as _;
 
+pub mod buffer;
 pub mod color;
 pub mod screen;
 
