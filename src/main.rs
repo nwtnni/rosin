@@ -37,7 +37,5 @@ fn panic(info: &panic::PanicInfo) -> ! {
 
 #[test_case]
 fn smoke_bin() {
-    sprint!("smoke_bin... ");
     assert_eq!(1, 1);
-    sprintln!("[ok]");
 }

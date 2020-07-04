@@ -12,12 +12,25 @@ pub mod serial;
 pub mod qemu;
 pub mod vga;
 
+use core::any;
 use core::panic;
 
-pub fn test_runner(tests: &[&dyn Fn()]) {
+pub trait Test {
+    fn run(&self);
+}
+
+impl<T: Fn()> Test for T {
+    fn run(&self) {
+        sprint!("{}...\t", any::type_name::<T>());
+        self();
+        sprintln!("[ok]");
+    }
+}
+
+pub fn test_runner(tests: &[&dyn Test]) {
     sprintln!("Running {} tests...", tests.len());
     for test in tests {
-        test();
+        test.run();
     }
     qemu::exit(qemu::Exit::Success);
 }
@@ -39,7 +52,5 @@ extern "C" fn _start() -> ! {
 
 #[test_case]
 fn smoke_lib() {
-    sprint!("smoke_lib... ");
     assert_eq!(1, 1);
-    sprintln!("[ok]");
 }
