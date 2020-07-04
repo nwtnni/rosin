@@ -6,6 +6,7 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+pub mod qemu;
 pub mod vga;
 
 use core::panic;
@@ -15,6 +16,7 @@ pub fn test_runner(tests: &[&dyn Fn()]) {
     for test in tests {
         test();
     }
+    qemu::exit(qemu::Exit::Success);
 }
 
 #[cfg(test)]
