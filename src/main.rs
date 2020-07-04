@@ -1,9 +1,24 @@
 #![no_main]
 #![no_std]
 
+#![feature(custom_test_frameworks)]
+#![test_runner(rosin::test_runner)]
+#![reexport_test_harness_main = "test_main"]
+
 use core::panic;
 
+use rosin::print;
 use rosin::println;
+
+#[no_mangle]
+extern "C" fn _start() -> ! {
+    println!("Starting...");
+
+    #[cfg(test)]
+    test_main();
+
+    loop {}
+}
 
 #[panic_handler]
 fn panic(info: &panic::PanicInfo) -> ! {
@@ -11,9 +26,9 @@ fn panic(info: &panic::PanicInfo) -> ! {
     loop {}
 }
 
-#[no_mangle]
-pub extern "C" fn _start() {
-    println!("Hello, wörld!");
-    println!("The numbers are {} and {}", 42, 1.0/3.0);
-    panic!("Here");
+#[test_case]
+fn smoke_bin() {
+    print!("smoke_bin... ");
+    assert_eq!(1, 1);
+    println!("[ok]");
 }
