@@ -6,23 +6,27 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+#[macro_use]
+pub mod serial;
+
 pub mod qemu;
 pub mod vga;
 
 use core::panic;
 
 pub fn test_runner(tests: &[&dyn Fn()]) {
-    println!("Running {} tests...", tests.len());
+    sprintln!("Running {} tests...", tests.len());
     for test in tests {
         test();
     }
     qemu::exit(qemu::Exit::Success);
 }
 
-#[cfg(test)]
-#[panic_handler]
-fn panic(info: &panic::PanicInfo) -> ! {
-    println!("{}", info);
+#[cfg_attr(test, panic_handler)]
+pub fn panic(info: &panic::PanicInfo) -> ! {
+    sprintln!("[failed]");
+    sprintln!("Error: {}", info);
+    qemu::exit(qemu::Exit::Failure);
     loop {}
 }
 
@@ -35,7 +39,7 @@ extern "C" fn _start() -> ! {
 
 #[test_case]
 fn smoke_lib() {
-    print!("smoke_lib... ");
+    sprint!("smoke_lib... ");
     assert_eq!(1, 1);
-    println!("[ok]");
+    sprintln!("[ok]");
 }

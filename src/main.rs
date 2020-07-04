@@ -9,6 +9,8 @@ use core::panic;
 
 use rosin::print;
 use rosin::println;
+use rosin::sprint;
+use rosin::sprintln;
 
 #[no_mangle]
 extern "C" fn _start() -> ! {
@@ -20,15 +22,22 @@ extern "C" fn _start() -> ! {
     loop {}
 }
 
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &panic::PanicInfo) -> ! {
     println!("{}", info);
     loop {}
 }
 
+#[cfg(test)]
+#[panic_handler]
+fn panic(info: &panic::PanicInfo) -> ! {
+    rosin::panic(info)
+}
+
 #[test_case]
 fn smoke_bin() {
-    print!("smoke_bin... ");
+    sprint!("smoke_bin... ");
     assert_eq!(1, 1);
-    println!("[ok]");
+    sprintln!("[ok]");
 }
