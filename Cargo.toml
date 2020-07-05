@@ -20,3 +20,7 @@ test-args = [
     "-display", "none",
     "-serial", "stdio",
 ]
+
+[[test]]
+name = "panic"
+harness = false
