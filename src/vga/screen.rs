@@ -23,7 +23,7 @@ lazy_static! {
 pub struct Writer {
     column: usize,
     color: color::Code,
-    buffer: buffer::Buffer,
+    pub(super) buffer: buffer::Buffer,
 }
 
 impl Writer {

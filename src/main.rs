@@ -7,10 +7,7 @@
 
 use core::panic;
 
-use rosin::print;
 use rosin::println;
-use rosin::sprint;
-use rosin::sprintln;
 
 #[no_mangle]
 extern "C" fn _start() -> ! {
