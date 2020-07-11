@@ -52,6 +52,7 @@ pub fn panic(info: &panic::PanicInfo) -> ! {
 #[cfg(test)]
 #[no_mangle]
 extern "C" fn _start() -> ! {
+    init();
     test_main();
     loop {}
 }
@@ -59,4 +60,9 @@ extern "C" fn _start() -> ! {
 #[test_case]
 fn smoke_lib() {
     assert_eq!(1, 1);
+}
+
+#[test_case]
+fn breakpoint_exception() {
+    x86_64::instructions::interrupts::int3();
 }
