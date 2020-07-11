@@ -13,8 +13,14 @@ use rosin::println;
 extern "C" fn _start() -> ! {
     println!("Starting...");
 
+    rosin::init();
+
+    x86_64::instructions::interrupts::int3();
+
     #[cfg(test)]
     test_main();
+
+    println!("Did not crash!");
 
     loop {}
 }

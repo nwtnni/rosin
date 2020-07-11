@@ -1,6 +1,7 @@
 #![cfg_attr(test, no_main)]
 #![no_std]
 
+#![feature(abi_x86_interrupt)]
 #![feature(untagged_unions)]
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test_runner)]
@@ -9,11 +10,16 @@
 #[macro_use]
 pub mod serial;
 
+pub mod interrupt;
 pub mod qemu;
 pub mod vga;
 
 use core::any;
 use core::panic;
+
+pub fn init() {
+    interrupt::init_idt();
+}
 
 pub trait Test {
     fn run(&self);
