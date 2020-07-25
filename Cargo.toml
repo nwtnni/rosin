@@ -24,3 +24,7 @@ test-args = [
 [[test]]
 name = "panic"
 harness = false
+
+[[test]]
+name = "stack_overflow"
+harness = false
