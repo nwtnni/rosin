@@ -10,7 +10,7 @@
 #[macro_use]
 pub mod serial;
 
-pub mod interrupt;
+pub mod idt;
 pub mod qemu;
 pub mod vga;
 
@@ -18,7 +18,7 @@ use core::any;
 use core::panic;
 
 pub fn init() {
-    interrupt::init_idt();
+    idt::init();
 }
 
 pub trait Test {
