@@ -15,9 +15,12 @@ extern "C" fn _start() -> ! {
 
     rosin::init();
 
-    unsafe {
-        *(0xdeadbeef as *mut u64) = 42; 
+    #[allow(unconditional_recursion)]
+    fn stack_overflow() {
+        stack_overflow();
     }
+
+    stack_overflow();
 
     #[cfg(test)]
     test_main();

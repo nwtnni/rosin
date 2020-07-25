@@ -11,6 +11,7 @@
 pub mod serial;
 
 pub mod idt;
+pub mod gdt;
 pub mod qemu;
 pub mod vga;
 
@@ -18,6 +19,7 @@ use core::any;
 use core::panic;
 
 pub fn init() {
+    gdt::init();
     idt::init();
 }
 
