@@ -5,6 +5,9 @@
 #![test_runner(rosin::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+// Explicitly link libc implementations
+extern crate rlibc;
+
 use core::panic;
 
 use rosin::println;

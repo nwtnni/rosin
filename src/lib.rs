@@ -7,6 +7,9 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+// Explicitly link libc implementations
+extern crate rlibc;
+
 #[macro_use]
 pub mod serial;
 
