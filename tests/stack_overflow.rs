@@ -53,5 +53,5 @@ extern "x86-interrupt" fn double_fault(
 ) -> ! {
     sprintln!("[ok]");
     qemu::exit(qemu::Exit::Success);
-    loop {}
+    rosin::hlt_loop()
 }

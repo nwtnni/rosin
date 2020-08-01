@@ -11,7 +11,7 @@ use rosin::println;
 #[no_mangle]
 extern "C" fn _start() -> ! {
     test_main();
-    loop {}
+    rosin::hlt_loop()
 }
 
 #[panic_handler]

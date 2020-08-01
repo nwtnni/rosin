@@ -53,7 +53,13 @@ pub fn panic(info: &panic::PanicInfo) -> ! {
     sprintln!("[failed]");
     sprintln!("Error: {}", info);
     qemu::exit(qemu::Exit::Failure);
-    loop {}
+    hlt_loop()
+}
+
+pub fn hlt_loop() -> ! {
+    loop {
+        x86_64::instructions::hlt();
+    }
 }
 
 #[cfg(test)]
@@ -61,7 +67,7 @@ pub fn panic(info: &panic::PanicInfo) -> ! {
 extern "C" fn _start() -> ! {
     init();
     test_main();
-    loop {}
+    hlt_loop()
 }
 
 #[test_case]

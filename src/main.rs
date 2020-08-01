@@ -10,7 +10,6 @@ extern crate rlibc;
 
 use core::panic;
 
-use rosin::print;
 use rosin::println;
 
 #[no_mangle]
@@ -23,17 +22,14 @@ extern "C" fn _start() -> ! {
     test_main();
 
     println!("Did not crash!");
-
-    loop {
-        print!("-");
-    }
+    rosin::hlt_loop()
 }
 
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &panic::PanicInfo) -> ! {
     println!("{}", info);
-    loop {}
+    rosin::hlt_loop()
 }
 
 #[cfg(test)]

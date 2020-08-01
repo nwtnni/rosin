@@ -11,14 +11,14 @@ use rosin::qemu;
 extern "C" fn _start() -> ! {
     should_fail();
     qemu::exit(qemu::Exit::Failure);
-    loop {}
+    rosin::hlt_loop()
 }
 
 #[panic_handler]
 fn panic(info: &panic::PanicInfo) -> ! {
     sprintln!("[ok]");
     qemu::exit(qemu::Exit::Success);
-    loop {}
+    rosin::hlt_loop()
 }
 
 fn should_fail() {
