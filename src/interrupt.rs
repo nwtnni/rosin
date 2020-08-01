@@ -1,4 +1,9 @@
 use lazy_static::lazy_static;
+use pc_keyboard::DecodedKey;
+use pc_keyboard::HandleControl;
+use pc_keyboard::Keyboard;
+use pc_keyboard::layouts;
+use pc_keyboard::ScancodeSet1;
 use pic8259_simple::ChainedPics;
 use x86_64::instructions::port;
 use x86_64::structures::idt;
@@ -31,6 +36,10 @@ lazy_static! {
         }
 
         idt
+    };
+
+    static ref KEYBOARD: spin::Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = {
+        spin::Mutex::new(Keyboard::new(layouts::Us104Key, ScancodeSet1, HandleControl::Ignore))
     };
 }
 
@@ -70,7 +79,15 @@ extern "x86-interrupt" fn keyboard(_stack_frame: &mut idt::InterruptStackFrame) 
         port::Port::new(0x60).read()
     };
 
-    print!("{}", scancode);
+    let mut keyboard = KEYBOARD.lock();
+    if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
+        if let Some(key) = keyboard.process_keyevent(key_event) {
+            match key {
+            | DecodedKey::Unicode(character) => print!("{}", character),
+            | DecodedKey::RawKey(key) => print!("{:?}", key),
+            }
+        }
+    }
 
     unsafe {
         PICS.lock()
