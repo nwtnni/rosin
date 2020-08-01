@@ -24,8 +24,8 @@ pub fn init() {
 }
 
 extern "x86-interrupt" fn breakpoint(frame: &mut idt::InterruptStackFrame) {
-    println!("Breakpoint Exception");    
-    println!("{:#?}", frame);    
+    println!("Breakpoint Exception");
+    println!("{:#?}", frame);
 }
 
 extern "x86-interrupt" fn double_fault(frame: &mut idt::InterruptStackFrame, _: u64) -> ! {

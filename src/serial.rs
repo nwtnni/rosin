@@ -13,7 +13,7 @@ lazy_static! {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    SERIAL_1.lock().write_fmt(args).expect("Failed to print to serial interface");    
+    SERIAL_1.lock().write_fmt(args).expect("Failed to print to serial interface");
 }
 
 #[macro_export]
