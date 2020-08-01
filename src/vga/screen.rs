@@ -41,6 +41,10 @@ impl Writer {
         | 0x7F..=0xFF => 0xFE,
         };
 
+        if self.column >= buffer::WIDTH {
+            self.new_line();
+        }
+
         self.buffer[(buffer::HEIGHT - 1, self.column)]
             .write(buffer::Char {
                 ascii,

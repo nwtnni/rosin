@@ -18,11 +18,15 @@ macro_rules! println {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    screen::WRITER.lock().write_fmt(args).unwrap();
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        screen::WRITER.lock().write_fmt(args).unwrap();
+    });
 }
 
 #[cfg(test)]
 mod tests {
+
+    use core::fmt::Write as _;
 
     use crate::println;
     use super::buffer;
@@ -42,18 +46,17 @@ mod tests {
 
     #[test_case]
     fn println_output() {
-        let string = "Testing VGA buffer output";
-        println!("{}", string);
-        for (index, expected) in string.chars().enumerate() {
-            let actual = screen::WRITER
-                .lock()
-                .buffer[(buffer::HEIGHT - 2, index)]
-                .read();
-            assert_eq!(
-                char::from(actual.ascii),
-                expected,
-            );
-        }
+        x86_64::instructions::interrupts::without_interrupts(|| {
+            let string = "Testing VGA buffer output";
+            let mut writer = screen::WRITER.lock();
+            writeln!(writer, "\n{}", string).expect("[INTERNAL ERROR]: writeln panicked");
+            for (index, expected) in string.chars().enumerate() {
+                let actual = writer.buffer[(buffer::HEIGHT - 2, index)].read();
+                assert_eq!(
+                    char::from(actual.ascii),
+                    expected,
+                );
+            }
+        });
     }
-
 }

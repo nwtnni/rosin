@@ -13,7 +13,7 @@ extern crate rlibc;
 #[macro_use]
 pub mod serial;
 
-pub mod idt;
+pub mod interrupt;
 pub mod gdt;
 pub mod qemu;
 pub mod vga;
@@ -23,7 +23,9 @@ use core::panic;
 
 pub fn init() {
     gdt::init();
-    idt::init();
+    interrupt::init_idt();
+    interrupt::init_pics();
+    x86_64::instructions::interrupts::enable();
 }
 
 pub trait Test {
