@@ -15,6 +15,7 @@ pub mod serial;
 
 pub mod interrupt;
 pub mod gdt;
+pub mod mem;
 pub mod qemu;
 pub mod test;
 pub mod vga;
