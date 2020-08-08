@@ -21,11 +21,27 @@ pub mod vga;
 use core::any;
 use core::panic;
 
+#[cfg(test)]
+bootloader::entry_point!(test_kernel_main);
+
+#[cfg(test)]
+fn test_kernel_main(_boot_info: &'static bootloader::BootInfo) -> ! {
+    init();
+    test_main();
+    hlt_loop()
+}
+
 pub fn init() {
     gdt::init();
     interrupt::init_idt();
     interrupt::init_pics();
     x86_64::instructions::interrupts::enable();
+}
+
+pub fn hlt_loop() -> ! {
+    loop {
+        x86_64::instructions::hlt();
+    }
 }
 
 pub trait Test {
@@ -53,20 +69,6 @@ pub fn panic(info: &panic::PanicInfo) -> ! {
     sprintln!("[failed]");
     sprintln!("Error: {}", info);
     qemu::exit(qemu::Exit::Failure);
-    hlt_loop()
-}
-
-pub fn hlt_loop() -> ! {
-    loop {
-        x86_64::instructions::hlt();
-    }
-}
-
-#[cfg(test)]
-#[no_mangle]
-extern "C" fn _start() -> ! {
-    init();
-    test_main();
     hlt_loop()
 }
 

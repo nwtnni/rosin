@@ -12,8 +12,9 @@ use core::panic;
 
 use rosin::println;
 
-#[no_mangle]
-extern "C" fn _start() -> ! {
+bootloader::entry_point!(kernel_main);
+
+fn kernel_main(_boot_info: &'static bootloader::BootInfo) -> ! {
     println!("Starting...");
 
     rosin::init();
