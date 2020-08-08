@@ -15,7 +15,7 @@ extern "C" fn _start() -> ! {
 }
 
 #[panic_handler]
-fn panic(info: &panic::PanicInfo) -> ! {
+fn panic(_: &panic::PanicInfo) -> ! {
     sprintln!("[ok]");
     qemu::exit(qemu::Exit::Success);
     rosin::hlt_loop()

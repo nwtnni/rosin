@@ -44,7 +44,7 @@ fn stack_overflow() {
 
 #[panic_handler]
 fn panic(info: &panic::PanicInfo) -> ! {
-    rosin::panic(info)
+    rosin::test::panic(info)
 }
 
 extern "x86-interrupt" fn double_fault(

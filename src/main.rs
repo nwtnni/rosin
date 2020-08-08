@@ -2,7 +2,7 @@
 #![no_std]
 
 #![feature(custom_test_frameworks)]
-#![test_runner(rosin::test_runner)]
+#![test_runner(rosin::test::runner)]
 #![reexport_test_harness_main = "test_main"]
 
 // Explicitly link libc implementations
@@ -36,7 +36,7 @@ fn panic(info: &panic::PanicInfo) -> ! {
 #[cfg(test)]
 #[panic_handler]
 fn panic(info: &panic::PanicInfo) -> ! {
-    rosin::panic(info)
+    rosin::test::panic(info)
 }
 
 #[test_case]
