@@ -4,8 +4,8 @@ use x86_64::structures::paging::mapper;
 
 use crate::util::Tap as _;
 
-const ADDR: usize = 0x4444_4444_0000;
-const SIZE: usize = 100 * 1024;
+pub const ADDR: usize = 0x4444_4444_0000;
+pub const SIZE: usize = 100 * 1024;
 
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();

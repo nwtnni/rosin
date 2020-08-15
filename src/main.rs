@@ -9,16 +9,13 @@
 extern crate alloc;
 extern crate rlibc;
 
-use alloc::string::String;
 use core::panic;
 
 use rosin::println;
-use rosin::mem;
-use rosin::util::Tap as _;
 
 bootloader::entry_point!(kernel_main);
 
-fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
+fn kernel_main(_boot_info: &'static bootloader::BootInfo) -> ! {
     println!("Starting...");
 
     rosin::init();
@@ -28,12 +25,18 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
     }
 
     #[cfg(not(test))] {
-        let phys_mem_offset = boot_info
+
+        use alloc::string::String;
+
+        use rosin::mem;
+        use rosin::util::Tap as _;
+
+        let phys_mem_offset = _boot_info
             .physical_memory_offset
             .tap(x86_64::VirtAddr::new);
 
         let mut page_table_mapper = unsafe { mem::init(phys_mem_offset) };
-        let mut frame_allocator = unsafe { mem::BootInfoFrameAllocator::init(&boot_info.memory_map) };
+        let mut frame_allocator = unsafe { mem::BootInfoFrameAllocator::init(&_boot_info.memory_map) };
 
         rosin::heap::init(&mut page_table_mapper, &mut frame_allocator)
             .expect("Failed to initialize heap");
