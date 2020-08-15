@@ -5,12 +5,12 @@
 #![test_runner(rosin::test::runner)]
 #![reexport_test_harness_main = "test_main"]
 
-// Explicitly link libc implementations
+// Explicitly link alloc and libc implementations
+extern crate alloc;
 extern crate rlibc;
 
+use alloc::string::String;
 use core::panic;
-
-use x86_64::structures::paging;
 
 use rosin::println;
 use rosin::mem;
@@ -32,18 +32,13 @@ fn kernel_main(boot_info: &'static bootloader::BootInfo) -> ! {
             .physical_memory_offset
             .tap(x86_64::VirtAddr::new);
 
-        let mut page_table = unsafe { mem::init(phys_mem_offset) };
+        let mut page_table_mapper = unsafe { mem::init(phys_mem_offset) };
         let mut frame_allocator = unsafe { mem::BootInfoFrameAllocator::init(&boot_info.memory_map) };
-        let page = 0
-            .tap(x86_64::VirtAddr::new)
-            .tap(paging::Page::containing_address);
 
-        mem::create_example_mapping(page, &mut page_table, &mut frame_allocator);
+        rosin::heap::init(&mut page_table_mapper, &mut frame_allocator)
+            .expect("Failed to initialize heap");
 
-        let page_ptr: *mut u64 = page.start_address().as_mut_ptr();
-        unsafe {
-            page_ptr.offset(400).write_volatile(0x_f021_f077_f065_f04e);
-        }
+        println!("{}", String::from("Did not crash!"));
     }
 
     rosin::hlt_loop()

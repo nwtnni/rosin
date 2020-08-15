@@ -2,19 +2,22 @@
 #![no_std]
 
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
 #![feature(untagged_unions)]
 #![feature(custom_test_frameworks)]
 #![test_runner(crate::test::runner)]
 #![reexport_test_harness_main = "test_main"]
 
-// Explicitly link libc implementations
+// Explicitly link alloc, libc implementations
+extern crate alloc;
 extern crate rlibc;
 
 #[macro_use]
 pub mod serial;
 
-pub mod interrupt;
 pub mod gdt;
+pub mod heap;
+pub mod interrupt;
 pub mod mem;
 pub mod qemu;
 pub mod test;
@@ -42,4 +45,9 @@ pub fn hlt_loop() -> ! {
     loop {
         x86_64::instructions::hlt();
     }
+}
+
+#[alloc_error_handler]
+fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
+    panic!("Allocation error: {:?}", layout);
 }
