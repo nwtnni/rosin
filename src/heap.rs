@@ -1,14 +1,16 @@
-use linked_list_allocator::LockedHeap;
 use x86_64::structures::paging;
 use x86_64::structures::paging::mapper;
 
+use crate::util;
 use crate::util::Tap as _;
+
+pub mod bump;
 
 pub const ADDR: usize = 0x4444_4444_0000;
 pub const SIZE: usize = 100 * 1024;
 
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: util::Mutex<bump::Allocator> = util::Mutex::new(bump::Allocator::new());
 
 pub fn init<M, F>(
     page_table_mapper: &mut M,
@@ -44,4 +46,8 @@ where
     }
 
     Ok(())
+}
+
+pub fn align(addr: usize, align: usize) -> usize {
+    (addr + align - 1) & !(align - 1)
 }
