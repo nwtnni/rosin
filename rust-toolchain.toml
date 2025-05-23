@@ -9,4 +9,4 @@ components = [
     "rust-std",
     "rust-src",
 ]
-targets = [ "aarch64-unknown-none" ]
+targets = [ "aarch64-unknown-none-softfloat" ]
