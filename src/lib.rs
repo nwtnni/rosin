@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod device;
+
 use core::fmt::Write;
 
 use aarch64_cpu::asm;

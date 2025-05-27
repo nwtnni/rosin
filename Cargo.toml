@@ -6,3 +6,4 @@ edition = "2024"
 
 [dependencies]
 aarch64-cpu = "10.0"
+tock-registers = "0.9"
