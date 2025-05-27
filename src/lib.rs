@@ -3,6 +3,7 @@
 pub mod device;
 mod sync;
 
+use core::fmt::Debug;
 use core::fmt::Write;
 
 use aarch64_cpu::asm;
@@ -31,6 +32,20 @@ pub fn initialize() {
 
 pub static UART: SpinLock<device::bcm2837b0::uart::Uart> =
     SpinLock::new(unsafe { device::bcm2837b0::uart::Uart::new(0x3F20_1000) });
+
+pub type Result<T> = core::result::Result<T, Error>;
+
+pub enum Error {
+    Todo,
+}
+
+impl Debug for Error {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::Todo => "TODO".fmt(fmt),
+        }
+    }
+}
 
 #[macro_export]
 macro_rules! print {

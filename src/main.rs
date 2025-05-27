@@ -48,7 +48,17 @@ _start:
 fn _start_kernel() -> ! {
     rosin::initialize();
     rosin::println!("Hello, world!");
-    rosin::spin()
+    let mut buffer = [0u8];
+    loop {
+        rosin::UART.lock().read(&mut buffer).unwrap();
+        rosin::print!(
+            "{}",
+            match buffer[0] {
+                b'\r' => '\n',
+                byte => byte as char,
+            }
+        );
+    }
 }
 
 use core::panic::PanicInfo;

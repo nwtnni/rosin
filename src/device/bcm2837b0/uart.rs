@@ -36,7 +36,16 @@ impl Uart {
             .write(Control::UARTEN::Enabled + Control::TXE::Enabled + Control::RXE::Enabled);
     }
 
-    fn write_byte(&mut self, byte: u8) {
+    pub fn read(&mut self, buffer: &mut [u8]) -> crate::Result<usize> {
+        while self.flag.is_set(Flag::RXFE) {
+            crate::pause();
+        }
+
+        buffer[0] = self.data.get() as u8;
+        Ok(1)
+    }
+
+    pub fn write_byte(&mut self, byte: u8) {
         while self.flag.is_set(Flag::TXFF) {
             crate::pause();
         }
