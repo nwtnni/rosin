@@ -1,11 +1,19 @@
 #![no_std]
 
 pub mod device;
+mod sync;
 
 use core::fmt::Write;
 
 use aarch64_cpu::asm;
+use sync::SpinLock;
 
+#[inline]
+pub fn pause() {
+    asm::nop()
+}
+
+#[inline]
 pub fn spin() -> ! {
     loop {
         asm::wfe()
@@ -14,8 +22,15 @@ pub fn spin() -> ! {
 
 #[doc(hidden)]
 pub fn _print(args: core::fmt::Arguments) {
-    Console.write_fmt(args).unwrap()
+    UART.lock().write_fmt(args).unwrap();
 }
+
+pub fn initialize() {
+    UART.lock().initialize();
+}
+
+pub static UART: SpinLock<device::bcm2837b0::uart::Uart> =
+    SpinLock::new(unsafe { device::bcm2837b0::uart::Uart::new(0x3F20_1000) });
 
 #[macro_export]
 macro_rules! print {
@@ -35,15 +50,16 @@ macro_rules! println {
     };
 }
 
+#[allow(dead_code)]
 struct Console;
 
 impl Write for Console {
     fn write_str(&mut self, string: &str) -> core::fmt::Result {
         const ADDRESS: *mut u8 = 0x3F20_1000 as _;
 
-        for byte in string.as_bytes() {
+        for byte in string.bytes() {
             unsafe {
-                ADDRESS.write_volatile(*byte);
+                ADDRESS.write_volatile(byte);
             }
         }
 

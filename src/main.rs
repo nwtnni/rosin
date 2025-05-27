@@ -46,6 +46,7 @@ _start:
 
 #[unsafe(no_mangle)]
 fn _start_kernel() -> ! {
+    rosin::initialize();
     rosin::println!("Hello, world!");
     rosin::spin()
 }

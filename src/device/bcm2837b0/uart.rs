@@ -1,15 +1,104 @@
+use core::fmt::Write;
+use core::ops::Deref;
+use core::ops::DerefMut;
+
+use aarch64_cpu::registers::Readable as _;
+use aarch64_cpu::registers::Writeable as _;
 use tock_registers::register_bitfields;
 use tock_registers::register_structs;
 use tock_registers::registers::ReadOnly;
 use tock_registers::registers::ReadWrite;
 use tock_registers::registers::WriteOnly;
 
+pub struct Uart {
+    address: usize,
+}
+
+impl Uart {
+    pub const unsafe fn new(address: usize) -> Self {
+        Self { address }
+    }
+
+    pub fn initialize(&mut self) {
+        self.flush();
+        self.control
+            .write(Control::UARTEN::Disabled + Control::TXE::Disabled + Control::RXE::Disabled);
+        self.interrupt_clear.write(InterruptClear::ALL::CLEAR);
+
+        self.integer_baud_rate
+            .write(IntegerBaudRate::BAUD_DIVINT.val(3));
+        self.fractional_baud_rate
+            .write(FractionalBaudRate::BAUD_DIVFRAC.val(16));
+        self.line_control
+            .write(LineControl::WLEN::EightBit + LineControl::FEN::FifosEnabled);
+
+        self.control
+            .write(Control::UARTEN::Enabled + Control::TXE::Enabled + Control::RXE::Enabled);
+    }
+
+    fn write_byte(&mut self, byte: u8) {
+        while self.flag.is_set(Flag::TXFF) {
+            crate::pause();
+        }
+
+        self.data.set(byte as u32);
+    }
+
+    pub fn flush(&mut self) {
+        while self.flag.is_set(Flag::BUSY) {
+            crate::pause()
+        }
+    }
+}
+
+impl Write for Uart {
+    fn write_str(&mut self, string: &str) -> core::fmt::Result {
+        for byte in string.bytes() {
+            self.write_byte(byte);
+        }
+
+        Ok(())
+    }
+}
+
+impl Deref for Uart {
+    type Target = Mmio;
+    fn deref(&self) -> &Self::Target {
+        unsafe { core::ptr::with_exposed_provenance::<Self::Target>(self.address).as_ref() }
+            .unwrap()
+    }
+}
+
+impl DerefMut for Uart {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { core::ptr::with_exposed_provenance_mut::<Self::Target>(self.address).as_mut() }
+            .unwrap()
+    }
+}
+
+register_structs! {
+    #[allow(non_snake_case)]
+    pub Mmio {
+        (0x00 => data: ReadWrite<u32>),
+        (0x04 => _reserved1),
+        (0x18 => flag: ReadOnly<u32, Flag::Register>),
+        (0x1c => _reserved2),
+        (0x24 => integer_baud_rate: WriteOnly<u32, IntegerBaudRate::Register>),
+        (0x28 => fractional_baud_rate: WriteOnly<u32, FractionalBaudRate::Register>),
+        (0x2c => line_control: WriteOnly<u32, LineControl::Register>),
+        (0x30 => control: WriteOnly<u32, Control::Register>),
+        (0x34 => _reserved3),
+        (0x44 => interrupt_clear: WriteOnly<u32, InterruptClear::Register>),
+        (0x48 => @END),
+    }
+}
+
 // https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/blob/644474cc09f755249f9c55d99a5d1e07a2562fc7/05_drivers_gpio_uart/src/bsp/device_driver/bcm/bcm2xxx_pl011_uart.rs
 register_bitfields! {
     u32,
 
     /// Flag Register.
-    FR [
+    Flag [
         /// Transmit FIFO empty. The meaning of this bit depends on the state of the FEN bit in the
         /// Line Control Register, LCR_H.
         ///
@@ -42,19 +131,19 @@ register_bitfields! {
     ],
 
     /// Integer Baud Rate Divisor.
-    IBRD [
+    IntegerBaudRate [
         /// The integer baud rate divisor.
         BAUD_DIVINT OFFSET(0) NUMBITS(16) []
     ],
 
     /// Fractional Baud Rate Divisor.
-    FBRD [
+    FractionalBaudRate [
         ///  The fractional baud rate divisor.
         BAUD_DIVFRAC OFFSET(0) NUMBITS(6) []
     ],
 
     /// Line Control Register.
-    LCR_H [
+    LineControl [
         /// Word length. These bits indicate the number of data bits transmitted or received in a
         /// frame.
         #[allow(clippy::enum_variant_names)]
@@ -78,7 +167,7 @@ register_bitfields! {
     ],
 
     /// Control Register.
-    CR [
+    Control [
         /// Receive enable. If this bit is set to 1, the receive section of the UART is enabled.
         /// Data reception occurs for either UART signals or SIR signals depending on the setting of
         /// the SIREN bit. When the UART is disabled in the middle of reception, it completes the
@@ -113,25 +202,8 @@ register_bitfields! {
     ],
 
     /// Interrupt Clear Register.
-    ICR [
+    InterruptClear [
         /// Meta field for all pending interrupts.
         ALL OFFSET(0) NUMBITS(11) []
     ]
-}
-
-register_structs! {
-    #[allow(non_snake_case)]
-    pub RegisterBlock {
-        (0x00 => DR: ReadWrite<u32>),
-        (0x04 => _reserved1),
-        (0x18 => FR: ReadOnly<u32, FR::Register>),
-        (0x1c => _reserved2),
-        (0x24 => IBRD: WriteOnly<u32, IBRD::Register>),
-        (0x28 => FBRD: WriteOnly<u32, FBRD::Register>),
-        (0x2c => LCR_H: WriteOnly<u32, LCR_H::Register>),
-        (0x30 => CR: WriteOnly<u32, CR::Register>),
-        (0x34 => _reserved3),
-        (0x44 => ICR: WriteOnly<u32, ICR::Register>),
-        (0x48 => @END),
-    }
 }
