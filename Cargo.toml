@@ -3,3 +3,6 @@ name = "rosin"
 version = "0.1.0"
 authors = ["Newton Ni <nwtnni@gmail.com>"]
 edition = "2024"
+
+[dependencies]
+aarch64-cpu = "10.0"
