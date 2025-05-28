@@ -75,5 +75,19 @@ use core::time::Duration;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    let _ = writeln!(
+        rosin::Console,
+        "[PANIC][{}:{}] {}",
+        _info
+            .location()
+            .map(|location| location.file())
+            .unwrap_or(""),
+        _info
+            .location()
+            .map(|location| location.line())
+            .unwrap_or(0),
+        _info.message(),
+    );
+
     rosin::spin()
 }

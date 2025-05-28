@@ -50,7 +50,7 @@ impl Debug for Error {
 }
 
 #[allow(dead_code)]
-struct Console;
+pub struct Console;
 
 impl Write for Console {
     fn write_str(&mut self, string: &str) -> core::fmt::Result {
