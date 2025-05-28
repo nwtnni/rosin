@@ -28,7 +28,7 @@ macro_rules! make_log {
                 {
                     let now = core::time::Duration::from($crate::time::Instant::now());
                     $crate::println!(
-                        concat!("[", $header, "][{:>4}.{:06}] ", $format),
+                        concat!("[", $header, "][{:>4}.{:06}][", core::module_path!(), "] ", $format),
                         now.as_secs(),
                         now.subsec_micros(),
                         $dollar($arg)*
