@@ -47,16 +47,16 @@ _start:
 #[unsafe(no_mangle)]
 fn _start_kernel() -> ! {
     rosin::initialize();
-    rosin::println!("Hello, world!");
+    rosin::info!("Hello, world!");
 
-    rosin::println!("Resolution: {}ns", rosin::time::resolution().as_nanos());
+    rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
 
     for _ in 0..2 {
-        rosin::println!("Sleeping for 1s...");
+        rosin::info!("Sleeping for 1s...");
         rosin::time::spin(Duration::from_secs(1));
     }
 
-    rosin::println!("Echo:");
+    rosin::info!("Echo:");
     let mut buffer = [0u8];
     loop {
         rosin::UART.lock().read(&mut buffer).unwrap();
