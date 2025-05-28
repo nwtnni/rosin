@@ -2,6 +2,7 @@
 
 pub mod device;
 mod sync;
+pub mod time;
 
 use core::fmt::Debug;
 use core::fmt::Write;

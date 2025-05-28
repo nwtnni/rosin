@@ -48,6 +48,15 @@ _start:
 fn _start_kernel() -> ! {
     rosin::initialize();
     rosin::println!("Hello, world!");
+
+    rosin::println!("Resolution: {}ns", rosin::time::resolution().as_nanos());
+
+    for _ in 0..2 {
+        rosin::println!("Sleeping for 1s...");
+        rosin::time::spin(Duration::from_secs(1));
+    }
+
+    rosin::println!("Echo:");
     let mut buffer = [0u8];
     loop {
         rosin::UART.lock().read(&mut buffer).unwrap();
@@ -62,6 +71,7 @@ fn _start_kernel() -> ! {
 }
 
 use core::panic::PanicInfo;
+use core::time::Duration;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
