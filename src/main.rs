@@ -17,13 +17,16 @@ use aarch64_cpu::registers::SPSR_EL3;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
 
+// Avoid clobbering DTB and next three reserved arguments
+// - https://github.com/raspberrypi/tools/blob/439b6198a9b340de5998dd14a26a0d9d38a6bcac/armstubs/armstub8.S#L163-L171
+//
 // https://devblogs.microsoft.com/oldnewthing/20220726-00/?p=106898
 // https://dinfuehr.github.io/blog/encoding-of-immediate-values-on-aarch64/
 // https://developer.arm.com/documentation/dui0774/i/armclang-Integrated-Assembler-Directives
 // https://stackoverflow.com/questions/38570495/aarch64-relocation-prefixes/38608738#38608738
 core::arch::global_asm! {
 r"
-.pushsection .text._start
+.pushsection .text.boot
 
 # Explicit :pg_hi21: doesn't seem to be supported
 # https://reviews.llvm.org/D64455
@@ -33,21 +36,22 @@ r"
 .endmacro
 
 _start:
-    mrs x0, MPIDR_EL1
-    and x0, x0, 0b11
-    cmp x0, xzr
+    mrs x4, MPIDR_EL1
+    and x4, x4, 0b11
+    cmp x4, xzr
     b.ne .L_loop
 
-    ADR_REL x0, __BSS_LO
-    ADR_REL x1, __BSS_HI
+    ADR_REL x4, __BSS_LO
+    ADR_REL x5, __BSS_HI
 .L_bss:
-    cmp x0, x1
+    cmp x4, x5
     b.eq .L_rust
-    stp xzr, xzr, [x0], 16
+    stp xzr, xzr, [x4], 16
     b .L_bss
 .L_rust:
-    ADR_REL x0, __STACK_HI
-    mov SP, x0
+    ldr x0, =__DTB
+    ADR_REL x4, __STACK_HI
+    mov SP, x4
     b _start_hypervisor
 .L_loop:
     wfe
@@ -61,7 +65,7 @@ _start:
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn _start_hypervisor(stack: u64) -> ! {
+extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, stack: u64) -> ! {
     let level = CurrentEL.get();
 
     if level >= 3 {
@@ -96,17 +100,26 @@ extern "C" fn _start_hypervisor(stack: u64) -> ! {
                     + SPSR_EL3::M::EL1h,
             );
         }
-        _ => _start_kernel(),
+        _ => _start_kernel(device_tree),
     }
 
     SP_EL1.set(stack);
+
+    unsafe {
+        core::arch::asm! {
+            "mov w0, {:w}",
+            in(reg) device_tree,
+        }
+    }
+
     asm::eret()
 }
 
 #[unsafe(no_mangle)]
-fn _start_kernel() -> ! {
+fn _start_kernel(device_tree: u32) -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
+    rosin::info!("Device tree: {:x?}", device_tree as usize as *const ());
 
     rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
 

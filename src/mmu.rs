@@ -10,13 +10,38 @@ use aarch64_cpu::registers::TCR_EL1;
 use aarch64_cpu::registers::TTBR0_EL1;
 use tock_registers::interfaces::Writeable;
 use tock_registers::register_bitfields;
-use tock_registers::registers::ReadWrite;
+use tock_registers::registers::InMemoryRegister;
+
+static PAGE_TABLE: PageTable = PageTable::new();
+
+#[repr(C, align(65536))]
+pub struct PageTable {
+    l3: [[Page; 8192]; 8],
+    l2: [Table; 8],
+}
+
+unsafe impl Sync for PageTable {}
+
+impl PageTable {
+    const fn new() -> Self {
+        Self {
+            l3: [const { [const { Page::new() }; 8192] }; 8],
+            l2: [const { Table::new() }; 8],
+        }
+    }
+}
 
 #[repr(transparent)]
-struct Table(ReadWrite<u64, table::Register>);
+struct Table(InMemoryRegister<u64, table::Register>);
+
+impl Table {
+    const fn new() -> Self {
+        Self(InMemoryRegister::new(0))
+    }
+}
 
 impl Deref for Table {
-    type Target = ReadWrite<u64, table::Register>;
+    type Target = InMemoryRegister<u64, table::Register>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -29,10 +54,16 @@ impl DerefMut for Table {
 }
 
 #[repr(transparent)]
-struct Page(ReadWrite<u64, page::Register>);
+struct Page(InMemoryRegister<u64, page::Register>);
+
+impl Page {
+    const fn new() -> Self {
+        Self(InMemoryRegister::new(0))
+    }
+}
 
 impl Deref for Page {
-    type Target = ReadWrite<u64, page::Register>;
+    type Target = InMemoryRegister<u64, page::Register>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

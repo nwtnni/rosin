@@ -1,8 +1,8 @@
 /* https://forums.raspberrypi.com/viewtopic.php?t=328000 */
 __KERNEL_PHYS = 0x8 << 16;
-__KERNEL_VIRT = 0xFFFFFFFF << 32;
+/* __KERNEL_VIRT = 0xFFFFFFFF << 32; */
 
-ENTRY(__KERNEL_VIRT)
+ENTRY(__KERNEL_PHYS)
 
 HIDDEN(PAGE_SIZE = 1 << 16);
 
@@ -13,11 +13,14 @@ PHDRS {
 }
 
 SECTIONS {
-    . = __KERNEL_VIRT;
+    __STACK_LO = .;
+    . += __KERNEL_PHYS;
+    __STACK_HI = .;
+
     __SEGMENT_RX_LO = .;
 
-    .text : AT(__KERNEL_PHYS) {
-        KEEP(*(.text._start))
+    .text : {
+        KEEP(*(.text.boot))
         *( .text .text.* )
     } :segment_rx
 
@@ -39,6 +42,8 @@ SECTIONS {
 
     .data : ALIGN(16) {
         *( .data .data.* )
+        __DTB = .;
+        *( .dtb )
     } :segment_rw
 
     .bss (NOLOAD) : ALIGN(16) {
@@ -46,22 +51,6 @@ SECTIONS {
         *( .bss .bss.* )
         . = ALIGN(16);
         __BSS_HI = .;
-    } :segment_rw
-
-    . = ALIGN(PAGE_SIZE);
-
-    __PAGE_TABLE_L2 = .;
-    . += PAGE_SIZE;
-    __PAGE_TABLE_L3 = .;
-    . += PAGE_SIZE;
-
-    __GUARD = .;
-    . += PAGE_SIZE;
-
-    .stack (NOLOAD) : AT(0) {
-        __STACK_LO = .;
-        . += __KERNEL_PHYS;
-        __STACK_HI = .;
     } :segment_rw
 
     . = ALIGN(PAGE_SIZE);
