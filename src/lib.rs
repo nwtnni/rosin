@@ -1,14 +1,18 @@
 #![no_std]
 
+#[macro_use]
+pub mod print;
+
 pub mod device;
 pub mod fdt;
 pub mod mmu;
-pub mod print;
 mod sync;
 pub mod time;
 
 use core::fmt::Debug;
 use core::fmt::Write;
+
+pub use fdt::Fdt;
 
 use aarch64_cpu::asm;
 use sync::SpinLock;

@@ -121,13 +121,23 @@ fn _start_kernel(_device_tree: u32) -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
 
-    let device_tree = device::bcm2837b0::DTB;
+    let device_tree = &device::bcm2837b0::DTB;
 
-    rosin::info!("Device tree: {:#x?}", unsafe {
-        (device_tree.as_ptr().cast::<fdt::Header>())
-            .as_ref()
-            .unwrap()
-    });
+    rosin::info!("Device tree header: {:#x?}", device_tree.header());
+
+    let mut indent = 0;
+    for token in device_tree.iter() {
+        match token {
+            fdt::Token::Begin { name } => {
+                rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
+                indent += 1;
+            }
+            fdt::Token::Prop { name, value } => {
+                rosin::info!("{:|<width$}-{}: {:?}", "", name, value, width = indent * 2)
+            }
+            fdt::Token::End => indent -= 1,
+        }
+    }
 
     rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
 
