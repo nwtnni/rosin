@@ -24,9 +24,9 @@ impl Add<Duration> for Instant {
         let frequency = frequency();
 
         let s = rhs.as_secs() * frequency;
-        let ns = (rhs.as_nanos() * frequency as u128) / 10u128.pow(9);
+        let ns = (rhs.subsec_nanos() as u64 * frequency) / 10u64.pow(9);
 
-        Self(self.0 + s + ns as u64)
+        Self(self.0 + s + ns)
     }
 }
 
