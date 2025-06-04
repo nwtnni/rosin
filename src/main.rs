@@ -14,6 +14,8 @@ use aarch64_cpu::registers::SCR_EL3;
 use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
+use rosin::device;
+use rosin::fdt;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
 
@@ -49,7 +51,6 @@ _start:
     stp xzr, xzr, [x4], 16
     b .L_bss
 .L_rust:
-    ldr x0, =__DTB
     ADR_REL x4, __STACK_HI
     mov SP, x4
     b _start_hypervisor
@@ -116,10 +117,17 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
 }
 
 #[unsafe(no_mangle)]
-fn _start_kernel(device_tree: u32) -> ! {
+fn _start_kernel(_device_tree: u32) -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
-    rosin::info!("Device tree: {:x?}", device_tree as usize as *const ());
+
+    let device_tree = device::bcm2837b0::DTB;
+
+    rosin::info!("Device tree: {:#x?}", unsafe {
+        (device_tree.as_ptr().cast::<fdt::Header>())
+            .as_ref()
+            .unwrap()
+    });
 
     rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
 

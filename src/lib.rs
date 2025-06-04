@@ -1,6 +1,7 @@
 #![no_std]
 
 pub mod device;
+pub mod fdt;
 pub mod mmu;
 pub mod print;
 mod sync;

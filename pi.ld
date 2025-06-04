@@ -42,8 +42,6 @@ SECTIONS {
 
     .data : ALIGN(16) {
         *( .data .data.* )
-        __DTB = .;
-        *( .dtb )
     } :segment_rw
 
     .bss (NOLOAD) : ALIGN(16) {
