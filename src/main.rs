@@ -46,6 +46,8 @@ _start:
     stp xzr, xzr, [x0], 16
     b .L_bss
 .L_rust:
+    ADR_REL x0, __STACK_HI
+    mov SP, x0
     b _start_hypervisor
 .L_loop:
     wfe
@@ -59,8 +61,8 @@ _start:
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn _start_hypervisor() -> ! {
-    let level = CurrentEL.read(CurrentEL::EL);
+extern "C" fn _start_hypervisor(stack: u64) -> ! {
+    let level = CurrentEL.get();
 
     if level >= 3 {
         SCR_EL3.write(SCR_EL3::RW::NextELIsAarch64);
@@ -97,11 +99,7 @@ extern "C" fn _start_hypervisor() -> ! {
         _ => _start_kernel(),
     }
 
-    unsafe extern "C" {
-        static __STACK_HI: u64;
-    }
-
-    SP_EL1.set(unsafe { __STACK_HI });
+    SP_EL1.set(stack);
     asm::eret()
 }
 
