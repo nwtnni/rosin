@@ -86,7 +86,6 @@ impl DerefMut for Uart {
 }
 
 register_structs! {
-    #[allow(non_snake_case)]
     pub Mmio {
         (0x00 => data: ReadWrite<u32>),
         (0x04 => _reserved1),

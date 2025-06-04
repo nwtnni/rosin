@@ -1,49 +1,71 @@
 /* https://forums.raspberrypi.com/viewtopic.php?t=328000 */
-__PHYSICAL_ADDRESS = 0x80000;
+__KERNEL_PHYS = 0x8 << 16;
+__KERNEL_VIRT = 0xFFFFFFFF << 32;
 
-ENTRY(__PHYSICAL_ADDRESS)
+ENTRY(__KERNEL_VIRT)
+
+HIDDEN(PAGE_SIZE = 1 << 16);
 
 PHDRS {
-    segment_stack PT_LOAD FLAGS(6);
-    segment_code PT_LOAD FLAGS(5);
-    segment_rodata PT_LOAD FLAGS(4);
-    segment_data PT_LOAD FLAGS(6);
-    segment_bss PT_LOAD FLAGS(6);
+    segment_ro PT_LOAD FLAGS(4);
+    segment_rx PT_LOAD FLAGS(5);
+    segment_rw PT_LOAD FLAGS(6);
 }
 
 SECTIONS {
-    .stack (NOLOAD) : ALIGN(16) {
-        __STACK_LO = .;
-        . += __PHYSICAL_ADDRESS;
-        __STACK_HI = .;
-    } :segment_stack
+    . = __KERNEL_VIRT;
+    __SEGMENT_RX_LO = .;
 
-    . = __PHYSICAL_ADDRESS;
-
-    .text : ALIGN(4) {
-        HIDDEN(__TEXT_LO = .);
+    .text : AT(__KERNEL_PHYS) {
         KEEP(*(.text._start))
         *( .text .text.* )
-    } :segment_code
+    } :segment_rx
+
+    . = ALIGN(PAGE_SIZE);
+    __SEGMENT_RX_HI = .;
+    __SEGMENT_RO_LO = .;
+
+    .got : ALIGN(16) {
+        *( .got .got.* )
+    } :segment_ro
 
     .rodata : ALIGN(16) {
         *( .rodata .rodata.* )
-    } :segment_rodata
+    } :segment_ro
+
+    . = ALIGN(PAGE_SIZE);
+    __SEGMENT_RO_HI = .;
+    __SEGMENT_RW_LO = .;
 
     .data : ALIGN(16) {
         *( .data .data.* )
-    } :segment_data
+    } :segment_rw
 
     .bss (NOLOAD) : ALIGN(16) {
         __BSS_LO = .;
         *( .bss .bss.* )
         . = ALIGN(16);
         __BSS_HI = .;
-    } :segment_bss
+    } :segment_rw
 
-    .got : {
-        *( .got .got.* )
-    }
+    . = ALIGN(PAGE_SIZE);
+
+    __PAGE_TABLE_L2 = .;
+    . += PAGE_SIZE;
+    __PAGE_TABLE_L3 = .;
+    . += PAGE_SIZE;
+
+    __GUARD = .;
+    . += PAGE_SIZE;
+
+    .stack (NOLOAD) : AT(0) {
+        __STACK_LO = .;
+        . += __KERNEL_PHYS;
+        __STACK_HI = .;
+    } :segment_rw
+
+    . = ALIGN(PAGE_SIZE);
+    __SEGMENT_RW_HI = .;
 
     ASSERT(SIZEOF(.got) == 0, "Unexpected relocation")
 

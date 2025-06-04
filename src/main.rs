@@ -46,8 +46,6 @@ _start:
     stp xzr, xzr, [x0], 16
     b .L_bss
 .L_rust:
-    ADR_REL x0, __STACK_HI
-    mov sp, x0
     b _start_hypervisor
 .L_loop:
     wfe
@@ -61,7 +59,7 @@ _start:
 }
 
 #[unsafe(no_mangle)]
-extern "C" fn _start_hypervisor(stack_hi: u64) -> ! {
+extern "C" fn _start_hypervisor() -> ! {
     let level = CurrentEL.read(CurrentEL::EL);
 
     if level >= 3 {
@@ -99,10 +97,15 @@ extern "C" fn _start_hypervisor(stack_hi: u64) -> ! {
         _ => _start_kernel(),
     }
 
-    SP_EL1.set(stack_hi);
+    unsafe extern "C" {
+        static __STACK_HI: u64;
+    }
+
+    SP_EL1.set(unsafe { __STACK_HI });
     asm::eret()
 }
 
+#[unsafe(no_mangle)]
 fn _start_kernel() -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
