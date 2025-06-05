@@ -8,6 +8,7 @@ pub mod fdt;
 pub mod mmu;
 mod sync;
 pub mod time;
+mod unit;
 
 use core::fmt::Debug;
 use core::fmt::Write;

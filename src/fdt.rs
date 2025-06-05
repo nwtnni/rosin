@@ -6,6 +6,8 @@ use core::ptr::NonNull;
 
 use arrayvec::ArrayVec;
 
+use crate::unit;
+
 pub struct Fdt<'fdt>(&'fdt [u8]);
 
 impl<'fdt> Fdt<'fdt> {
@@ -101,11 +103,11 @@ impl<'fdt> Fdt<'fdt> {
         str::from_utf8(slice).expect("Expected UTF-8 device tree string")
     }
 
-    fn int_cell(bytes: u32, cells: &'fdt [u8]) -> u64 {
-        match bytes {
+    fn int_cell(cells: Cell, data: &'fdt [u8]) -> u64 {
+        match cells.value() {
             0 => 0,
-            4 => u32::from_be_bytes(cells.try_into().unwrap()) as u64,
-            8 => u64::from_be_bytes(cells.try_into().unwrap()),
+            1 => u32::from_be_bytes(data.try_into().unwrap()) as u64,
+            2 => u64::from_be_bytes(data.try_into().unwrap()),
             _ => unimplemented!(),
         }
     }
@@ -180,15 +182,15 @@ pub struct Reservation {
 
 #[derive(Debug)]
 struct Context {
-    address_cells: u32,
-    size_cells: u32,
+    address: Cell,
+    size: Cell,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
-            address_cells: 2,
-            size_cells: 1,
+            address: unit::Byte::new(2).convert(),
+            size: unit::Byte::new(2).convert(),
         }
     }
 }
@@ -202,8 +204,8 @@ pub enum Token<'fdt> {
 pub enum Prop<'fdt> {
     Compatible(StrList<'fdt>),
     Model(&'fdt str),
-    AddressCells(u32),
-    SizeCells(u32),
+    AddressCells(Cell),
+    SizeCells(Cell),
     Reg(RangeList<'fdt>),
     Any { name: &'fdt str, value: &'fdt [u8] },
 }
@@ -214,20 +216,20 @@ impl<'fdt> Prop<'fdt> {
             "compatible" => Prop::Compatible(StrList(value)),
             "model" => Prop::Model(Fdt::str_slice(value)),
             "#address-cells" => {
-                let address_cells = u32::from_be_bytes(value.try_into().unwrap());
-                context.last_mut().unwrap().address_cells = address_cells;
-                Prop::AddressCells(address_cells)
+                let address = Cell::new(u32::from_be_bytes(value.try_into().unwrap()) as usize);
+                context.last_mut().unwrap().address = address;
+                Prop::AddressCells(address)
             }
             "#size-cells" => {
-                let size_cells = u32::from_be_bytes(value.try_into().unwrap());
-                context.last_mut().unwrap().size_cells = size_cells;
-                Prop::SizeCells(size_cells)
+                let size = Cell::new(u32::from_be_bytes(value.try_into().unwrap()) as usize);
+                context.last_mut().unwrap().size = size;
+                Prop::SizeCells(size)
             }
             "reg" => {
                 let parent = &context[context.len() - 2];
                 Prop::Reg(RangeList {
-                    address_bytes: parent.address_cells * 4,
-                    size_bytes: parent.size_cells * 4,
+                    address: parent.address.convert(),
+                    size: parent.address.convert(),
                     data: value,
                 })
             }
@@ -261,7 +263,7 @@ impl Debug for Prop<'_> {
                 Ok(())
             }
             Prop::Model(model) => write!(f, "{}", model),
-            Prop::AddressCells(cells) | Prop::SizeCells(cells) => write!(f, "{}", cells),
+            Prop::AddressCells(cells) | Prop::SizeCells(cells) => write!(f, "{:?}", cells),
             Prop::Reg(ranges) => {
                 let mut iter = ranges.iter();
                 if let Some(range) = iter.next() {
@@ -281,15 +283,15 @@ impl Debug for Prop<'_> {
 
 #[derive(Clone)]
 pub struct RangeList<'fdt> {
-    address_bytes: u32,
-    size_bytes: u32,
+    address: Cell,
+    size: Cell,
     data: &'fdt [u8],
 }
 
 #[derive(Copy, Clone)]
 pub struct Range {
     pub address: u64,
-    pub len: u64,
+    pub len: unit::Byte,
 }
 
 impl Debug for Range {
@@ -298,7 +300,7 @@ impl Debug for Range {
             f,
             "{:#x} - {:#x} ({:#x})",
             self.address,
-            self.address + self.len,
+            self.address + self.len.value() as u64,
             self.len
         )
     }
@@ -306,13 +308,19 @@ impl Debug for Range {
 
 impl<'fdt> RangeList<'fdt> {
     pub fn iter(&self) -> impl Iterator<Item = Range> {
+        let address: unit::Byte = self.address.convert();
+        let len: unit::Byte = self.size.convert();
+
         self.data
-            .chunks_exact((self.address_bytes + self.size_bytes) as usize)
-            .map(|chunk| {
-                let (address, len) = chunk.split_at(self.address_bytes as usize);
-                let address = Fdt::int_cell(self.address_bytes, address);
-                let len = Fdt::int_cell(self.size_bytes, len);
-                Range { address, len }
+            .chunks_exact(address.value() + len.value())
+            .map(move |chunk| {
+                let (address, len) = chunk.split_at(address.value());
+                let address = Fdt::int_cell(self.address, address);
+                let len = Fdt::int_cell(self.size, len);
+                Range {
+                    address,
+                    len: unit::Byte::new(len as usize),
+                }
             })
     }
 }
@@ -329,6 +337,8 @@ impl<'fdt> StrList<'fdt> {
             .map(Result::unwrap)
     }
 }
+
+type Cell = unit::Mem<2>;
 
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq)]
