@@ -15,7 +15,6 @@ use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
 use rosin::dev;
-use rosin::fdt;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
 
@@ -128,14 +127,14 @@ fn _start_kernel(_device_tree: u32) -> ! {
     let mut indent = 0;
     for token in device_tree.iter() {
         match token {
-            fdt::Token::Begin { name } => {
+            dev::tree::Token::Begin { name } => {
                 rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
                 indent += 1;
             }
-            fdt::Token::Prop(prop) => {
+            dev::tree::Token::Prop(prop) => {
                 rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
             }
-            fdt::Token::End => indent -= 1,
+            dev::tree::Token::End => indent -= 1,
         }
     }
 

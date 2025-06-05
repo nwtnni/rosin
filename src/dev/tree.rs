@@ -8,18 +8,18 @@ use arrayvec::ArrayVec;
 
 use crate::unit;
 
-pub struct Fdt<'fdt>(&'fdt [u8]);
+pub struct Blob<'dtb>(&'dtb [u8]);
 
-impl<'fdt> Fdt<'fdt> {
-    pub const fn new(fdt: &'fdt [u8]) -> Self {
-        Self(fdt)
+impl<'dtb> Blob<'dtb> {
+    pub const fn new(dtb: &'dtb [u8]) -> Self {
+        Self(dtb)
     }
 
-    pub fn header(&self) -> &'fdt Header<'fdt> {
+    pub fn header(&self) -> &'dtb Header<'dtb> {
         unsafe { self.as_ptr().cast::<Header>().as_ref() }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Token<'fdt>> {
+    pub fn iter(&self) -> impl Iterator<Item = Token<'dtb>> {
         let structs = u32::from(self.header().off_dt_struct);
         let mut walk = unsafe { self.as_ptr().byte_add(structs as usize).cast::<Be32>() };
         let mut done = false;
@@ -75,7 +75,7 @@ impl<'fdt> Fdt<'fdt> {
         })
     }
 
-    fn str_offset(&self, offset: u32) -> &'fdt str {
+    fn str_offset(&self, offset: u32) -> &'dtb str {
         let strings = u32::from(self.header().off_dt_strings);
         let base = unsafe {
             self.as_ptr()
@@ -85,7 +85,7 @@ impl<'fdt> Fdt<'fdt> {
         Self::str_pointer(base)
     }
 
-    fn str_pointer(base: NonNull<u8>) -> &'fdt str {
+    fn str_pointer(base: NonNull<u8>) -> &'dtb str {
         let len = (0..)
             .map(|offset| unsafe { base.byte_add(offset).read() })
             .position(|byte| byte == 0)
@@ -95,7 +95,7 @@ impl<'fdt> Fdt<'fdt> {
             .expect("Invalid UTF-8 in device tree")
     }
 
-    fn str_slice(slice: &'fdt [u8]) -> &'fdt str {
+    fn str_slice(slice: &'dtb [u8]) -> &'dtb str {
         let Some((0, slice)) = slice.split_last() else {
             panic!("Malformed device tree string: {:?}", slice);
         };
@@ -103,7 +103,7 @@ impl<'fdt> Fdt<'fdt> {
         str::from_utf8(slice).expect("Expected UTF-8 device tree string")
     }
 
-    fn int_cell(cells: Cell, data: &'fdt [u8]) -> u64 {
+    fn int_cell(cells: Cell, data: &'dtb [u8]) -> u64 {
         match cells.value() {
             0 => 0,
             1 => u32::from_be_bytes(data.try_into().unwrap()) as u64,
@@ -119,7 +119,7 @@ impl<'fdt> Fdt<'fdt> {
 
 #[repr(C, align(8))]
 #[derive(Debug)]
-pub struct Header<'fdt> {
+pub struct Header<'dtb> {
     /// This field shall contain the value 0xd00dfeed (big-endian)
     magic: Be32,
 
@@ -170,7 +170,7 @@ pub struct Header<'fdt> {
     /// of the devicetree blob.
     size_dt_struct: Be32,
 
-    _fdt: PhantomData<&'fdt ()>,
+    _dtb: PhantomData<&'dtb ()>,
 }
 
 #[repr(C, align(8))]
@@ -195,27 +195,27 @@ impl Default for Context {
     }
 }
 
-pub enum Token<'fdt> {
-    Begin { name: &'fdt str },
-    Prop(Prop<'fdt>),
+pub enum Token<'dtb> {
+    Begin { name: &'dtb str },
+    Prop(Prop<'dtb>),
     End,
 }
 
-pub enum Prop<'fdt> {
-    Compatible(StrList<'fdt>),
-    Model(&'fdt str),
+pub enum Prop<'dtb> {
+    Compatible(StrList<'dtb>),
+    Model(&'dtb str),
     AddressCells(Cell),
     SizeCells(Cell),
-    Reg(RegList<'fdt>),
-    Ranges(RangeList<'fdt>),
-    Any { name: &'fdt str, value: &'fdt [u8] },
+    Reg(RegList<'dtb>),
+    Ranges(RangeList<'dtb>),
+    Any { name: &'dtb str, value: &'dtb [u8] },
 }
 
-impl<'fdt> Prop<'fdt> {
-    fn new(context: &mut [Context], name: &'fdt str, value: &'fdt [u8]) -> Self {
+impl<'dtb> Prop<'dtb> {
+    fn new(context: &mut [Context], name: &'dtb str, value: &'dtb [u8]) -> Self {
         match name {
             "compatible" => Prop::Compatible(StrList(value)),
-            "model" => Prop::Model(Fdt::str_slice(value)),
+            "model" => Prop::Model(Blob::str_slice(value)),
             "#address-cells" => {
                 let address = Cell::new(u32::from_be_bytes(value.try_into().unwrap()) as usize);
                 context.last_mut().unwrap().address = address;
@@ -302,13 +302,13 @@ impl Debug for Prop<'_> {
 }
 
 #[derive(Clone)]
-pub struct RangeList<'fdt> {
+pub struct RangeList<'dtb> {
     address: Cell,
     size: Cell,
-    data: &'fdt [u8],
+    data: &'dtb [u8],
 }
 
-impl<'fdt> RangeList<'fdt> {
+impl<'dtb> RangeList<'dtb> {
     pub fn iter(&self) -> impl Iterator<Item = Range> {
         let address: unit::Byte = self.address.convert();
         let len: unit::Byte = self.size.convert();
@@ -318,9 +318,9 @@ impl<'fdt> RangeList<'fdt> {
             .map(move |chunk| {
                 let (child, chunk) = chunk.split_at(address.value());
                 let (parent, len) = chunk.split_at(address.value());
-                let parent = Fdt::int_cell(self.address, parent);
-                let child = Fdt::int_cell(self.address, child);
-                let len = Fdt::int_cell(self.size, len);
+                let parent = Blob::int_cell(self.address, parent);
+                let child = Blob::int_cell(self.address, child);
+                let len = Blob::int_cell(self.size, len);
                 Range {
                     child,
                     parent,
@@ -348,13 +348,13 @@ impl Debug for Range {
 }
 
 #[derive(Clone)]
-pub struct RegList<'fdt> {
+pub struct RegList<'dtb> {
     address: Cell,
     size: Cell,
-    data: &'fdt [u8],
+    data: &'dtb [u8],
 }
 
-impl<'fdt> RegList<'fdt> {
+impl<'dtb> RegList<'dtb> {
     pub fn iter(&self) -> impl Iterator<Item = Reg> {
         let address: unit::Byte = self.address.convert();
         let len: unit::Byte = self.size.convert();
@@ -363,8 +363,8 @@ impl<'fdt> RegList<'fdt> {
             .chunks_exact(address.value() + len.value())
             .map(move |chunk| {
                 let (address, len) = chunk.split_at(address.value());
-                let address = Fdt::int_cell(self.address, address);
-                let len = Fdt::int_cell(self.size, len);
+                let address = Blob::int_cell(self.address, address);
+                let len = Blob::int_cell(self.size, len);
                 Reg {
                     address,
                     len: unit::Byte::new(len as usize),
@@ -392,10 +392,10 @@ impl Debug for Reg {
 }
 
 #[derive(Clone)]
-pub struct StrList<'fdt>(&'fdt [u8]);
+pub struct StrList<'dtb>(&'dtb [u8]);
 
-impl<'fdt> StrList<'fdt> {
-    pub fn iter(&self) -> impl Iterator<Item = &'fdt str> {
+impl<'dtb> StrList<'dtb> {
+    pub fn iter(&self) -> impl Iterator<Item = &'dtb str> {
         self.0
             .split(|byte| *byte == 0)
             .filter(|str| !str.is_empty())
