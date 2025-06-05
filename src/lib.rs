@@ -3,7 +3,7 @@
 #[macro_use]
 pub mod print;
 
-pub mod device;
+pub mod dev;
 pub mod fdt;
 pub mod mmu;
 mod sync;
@@ -39,8 +39,8 @@ pub fn initialize() {
     UART.lock().initialize();
 }
 
-pub static UART: SpinLock<device::bcm2837b0::uart::Uart> =
-    SpinLock::new(unsafe { device::bcm2837b0::uart::Uart::new(0x3F20_1000) });
+pub static UART: SpinLock<dev::bcm2837b0::uart::Uart> =
+    SpinLock::new(unsafe { dev::bcm2837b0::uart::Uart::new(0x3F20_1000) });
 
 pub type Result<T> = core::result::Result<T, Error>;
 

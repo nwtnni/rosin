@@ -14,7 +14,7 @@ use aarch64_cpu::registers::SCR_EL3;
 use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
-use rosin::device;
+use rosin::dev;
 use rosin::fdt;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
@@ -121,7 +121,7 @@ fn _start_kernel(_device_tree: u32) -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
 
-    let device_tree = &device::bcm2837b0::DTB;
+    let device_tree = &dev::bcm2837b0::DTB;
 
     rosin::info!("Device tree header: {:#x?}", device_tree.header());
 
