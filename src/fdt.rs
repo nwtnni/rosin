@@ -206,7 +206,8 @@ pub enum Prop<'fdt> {
     Model(&'fdt str),
     AddressCells(Cell),
     SizeCells(Cell),
-    Reg(RangeList<'fdt>),
+    Reg(RegList<'fdt>),
+    Ranges(RangeList<'fdt>),
     Any { name: &'fdt str, value: &'fdt [u8] },
 }
 
@@ -227,7 +228,15 @@ impl<'fdt> Prop<'fdt> {
             }
             "reg" => {
                 let parent = &context[context.len() - 2];
-                Prop::Reg(RangeList {
+                Prop::Reg(RegList {
+                    address: parent.address.convert(),
+                    size: parent.address.convert(),
+                    data: value,
+                })
+            }
+            "ranges" => {
+                let parent = &context[context.len() - 2];
+                Prop::Ranges(RangeList {
                     address: parent.address.convert(),
                     size: parent.address.convert(),
                     data: value,
@@ -246,6 +255,7 @@ impl Debug for Prop<'_> {
             Prop::AddressCells(_) => "#address-cells",
             Prop::SizeCells(_) => "#size-cells",
             Prop::Reg(_) => "reg",
+            Prop::Ranges(_) => "ranges",
             Prop::Any { name, value: _ } => name,
         };
 
@@ -274,6 +284,16 @@ impl Debug for Prop<'_> {
                 }
                 Ok(())
             }
+            Prop::Ranges(ranges) => {
+                let mut iter = ranges.iter();
+                if let Some(range) = iter.next() {
+                    write!(f, "{:?}", range)?;
+                }
+                for range in iter {
+                    write!(f, "; {:?}", range)?;
+                }
+                Ok(())
+            }
             Prop::Any { name: _, value } => {
                 write!(f, "{:?}", value)
             }
@@ -288,9 +308,32 @@ pub struct RangeList<'fdt> {
     data: &'fdt [u8],
 }
 
+impl<'fdt> RangeList<'fdt> {
+    pub fn iter(&self) -> impl Iterator<Item = Range> {
+        let address: unit::Byte = self.address.convert();
+        let len: unit::Byte = self.size.convert();
+
+        self.data
+            .chunks_exact(address.value() * 2 + len.value())
+            .map(move |chunk| {
+                let (child, chunk) = chunk.split_at(address.value());
+                let (parent, len) = chunk.split_at(address.value());
+                let parent = Fdt::int_cell(self.address, parent);
+                let child = Fdt::int_cell(self.address, child);
+                let len = Fdt::int_cell(self.size, len);
+                Range {
+                    child,
+                    parent,
+                    len: unit::Byte::new(len as usize),
+                }
+            })
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Range {
-    pub address: u64,
+    pub child: u64,
+    pub parent: u64,
     pub len: unit::Byte,
 }
 
@@ -298,16 +341,21 @@ impl Debug for Range {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "{:#x} - {:#x} ({:#x})",
-            self.address,
-            self.address + self.len.value() as u64,
-            self.len
+            "{:#x} = {:#x} ({:#x})",
+            self.child, self.parent, self.len,
         )
     }
 }
 
-impl<'fdt> RangeList<'fdt> {
-    pub fn iter(&self) -> impl Iterator<Item = Range> {
+#[derive(Clone)]
+pub struct RegList<'fdt> {
+    address: Cell,
+    size: Cell,
+    data: &'fdt [u8],
+}
+
+impl<'fdt> RegList<'fdt> {
+    pub fn iter(&self) -> impl Iterator<Item = Reg> {
         let address: unit::Byte = self.address.convert();
         let len: unit::Byte = self.size.convert();
 
@@ -317,11 +365,29 @@ impl<'fdt> RangeList<'fdt> {
                 let (address, len) = chunk.split_at(address.value());
                 let address = Fdt::int_cell(self.address, address);
                 let len = Fdt::int_cell(self.size, len);
-                Range {
+                Reg {
                     address,
                     len: unit::Byte::new(len as usize),
                 }
             })
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Reg {
+    pub address: u64,
+    pub len: unit::Byte,
+}
+
+impl Debug for Reg {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "{:#x} - {:#x} ({:#x})",
+            self.address,
+            self.address + self.len.value() as u64,
+            self.len,
+        )
     }
 }
 
