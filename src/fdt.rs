@@ -42,7 +42,7 @@ impl<'fdt> Fdt<'fdt> {
                             core::slice::from_raw_parts(walk.add(3).cast::<u8>().as_ptr(), len);
 
                         let aligned = (len + 3) >> 2;
-                        (Some(Token::Prop { name, value }), 3 + aligned)
+                        (Some(Token::Prop(Prop::new(name, value))), 3 + aligned)
                     },
                     4 => (None, 1),
                     9 => {
@@ -153,12 +153,56 @@ pub struct Reservation {
 
 pub enum Token<'fdt> {
     Begin { name: &'fdt str },
-    Prop { name: &'fdt str, value: &'fdt [u8] },
+    Prop(Prop<'fdt>),
     End,
 }
 
-pub enum Value<'fdt> {
-    String(&'fdt str),
+pub enum Prop<'fdt> {
+    Compatible(StrList<'fdt>),
+    Any { name: &'fdt str, value: &'fdt [u8] },
+}
+
+impl<'fdt> Prop<'fdt> {
+    fn new(name: &'fdt str, value: &'fdt [u8]) -> Self {
+        match name {
+            "compatible" => Prop::Compatible(StrList(value)),
+            name => Prop::Any { name, value },
+        }
+    }
+}
+
+impl Debug for Prop<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Prop::Compatible(list) => {
+                write!(f, "compatible: ")?;
+                let mut iter = list.iter();
+                if let Some(string) = iter.next() {
+                    write!(f, "{}", string)?;
+                }
+                for string in iter {
+                    write!(f, "; {}", string)?;
+                }
+                Ok(())
+            }
+            Prop::Any { name, value } => {
+                write!(f, "{}: {:?}", name, value)
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct StrList<'fdt>(&'fdt [u8]);
+
+impl<'fdt> StrList<'fdt> {
+    pub fn iter(&self) -> impl Iterator<Item = &'fdt str> {
+        self.0
+            .split(|byte| *byte == 0)
+            .filter(|str| !str.is_empty())
+            .map(str::from_utf8)
+            .map(Result::unwrap)
+    }
 }
 
 #[repr(transparent)]

@@ -132,8 +132,8 @@ fn _start_kernel(_device_tree: u32) -> ! {
                 rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
                 indent += 1;
             }
-            fdt::Token::Prop { name, value } => {
-                rosin::info!("{:|<width$}-{}: {:?}", "", name, value, width = indent * 2)
+            fdt::Token::Prop(prop) => {
+                rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
             }
             fdt::Token::End => indent -= 1,
         }
