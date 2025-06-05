@@ -4,6 +4,8 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
+use arrayvec::ArrayVec;
+
 pub struct Fdt<'fdt>(&'fdt [u8]);
 
 impl<'fdt> Fdt<'fdt> {
@@ -19,6 +21,7 @@ impl<'fdt> Fdt<'fdt> {
         let structs = u32::from(self.header().off_dt_struct);
         let mut walk = unsafe { self.as_ptr().byte_add(structs as usize).cast::<Be32>() };
         let mut done = false;
+        let mut stack = ArrayVec::<Context, 16>::new();
 
         core::iter::from_fn(move || {
             if done {
@@ -30,9 +33,13 @@ impl<'fdt> Fdt<'fdt> {
                     1 => unsafe {
                         let name = Self::str_pointer(walk.add(1).cast::<u8>());
                         let aligned = (name.len() + 1 + 3) >> 2;
+                        stack.push(Context::default());
                         (Some(Token::Begin { name }), 1 + aligned)
                     },
-                    2 => (Some(Token::End), 1),
+                    2 => {
+                        stack.pop();
+                        (Some(Token::End), 1)
+                    }
                     3 => unsafe {
                         let len = u32::from(walk.add(1).read()) as usize;
                         let nameoff = u32::from(walk.add(2).read());
@@ -42,7 +49,10 @@ impl<'fdt> Fdt<'fdt> {
                             core::slice::from_raw_parts(walk.add(3).cast::<u8>().as_ptr(), len);
 
                         let aligned = (len + 3) >> 2;
-                        (Some(Token::Prop(Prop::new(name, value))), 3 + aligned)
+                        (
+                            Some(Token::Prop(Prop::new(&mut stack, name, value))),
+                            3 + aligned,
+                        )
                     },
                     4 => (None, 1),
                     9 => {
@@ -89,6 +99,15 @@ impl<'fdt> Fdt<'fdt> {
         };
 
         str::from_utf8(slice).expect("Expected UTF-8 device tree string")
+    }
+
+    fn int_cell(bytes: u32, cells: &'fdt [u8]) -> u64 {
+        match bytes {
+            0 => 0,
+            4 => u32::from_be_bytes(cells.try_into().unwrap()) as u64,
+            8 => u64::from_be_bytes(cells.try_into().unwrap()),
+            _ => unimplemented!(),
+        }
     }
 
     fn as_ptr(&self) -> NonNull<u8> {
@@ -159,6 +178,21 @@ pub struct Reservation {
     size: Be64,
 }
 
+#[derive(Debug)]
+struct Context {
+    address_cells: u32,
+    size_cells: u32,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            address_cells: 2,
+            size_cells: 1,
+        }
+    }
+}
+
 pub enum Token<'fdt> {
     Begin { name: &'fdt str },
     Prop(Prop<'fdt>),
@@ -170,16 +204,33 @@ pub enum Prop<'fdt> {
     Model(&'fdt str),
     AddressCells(u32),
     SizeCells(u32),
+    Reg(RangeList<'fdt>),
     Any { name: &'fdt str, value: &'fdt [u8] },
 }
 
 impl<'fdt> Prop<'fdt> {
-    fn new(name: &'fdt str, value: &'fdt [u8]) -> Self {
+    fn new(context: &mut [Context], name: &'fdt str, value: &'fdt [u8]) -> Self {
         match name {
             "compatible" => Prop::Compatible(StrList(value)),
             "model" => Prop::Model(Fdt::str_slice(value)),
-            "#address-cells" => Prop::AddressCells(u32::from_be_bytes(value.try_into().unwrap())),
-            "#size-cells" => Prop::SizeCells(u32::from_be_bytes(value.try_into().unwrap())),
+            "#address-cells" => {
+                let address_cells = u32::from_be_bytes(value.try_into().unwrap());
+                context.last_mut().unwrap().address_cells = address_cells;
+                Prop::AddressCells(address_cells)
+            }
+            "#size-cells" => {
+                let size_cells = u32::from_be_bytes(value.try_into().unwrap());
+                context.last_mut().unwrap().size_cells = size_cells;
+                Prop::SizeCells(size_cells)
+            }
+            "reg" => {
+                let parent = &context[context.len() - 2];
+                Prop::Reg(RangeList {
+                    address_bytes: parent.address_cells * 4,
+                    size_bytes: parent.size_cells * 4,
+                    data: value,
+                })
+            }
             name => Prop::Any { name, value },
         }
     }
@@ -192,6 +243,7 @@ impl Debug for Prop<'_> {
             Prop::Model(_) => "model",
             Prop::AddressCells(_) => "#address-cells",
             Prop::SizeCells(_) => "#size-cells",
+            Prop::Reg(_) => "reg",
             Prop::Any { name, value: _ } => name,
         };
 
@@ -210,10 +262,58 @@ impl Debug for Prop<'_> {
             }
             Prop::Model(model) => write!(f, "{}", model),
             Prop::AddressCells(cells) | Prop::SizeCells(cells) => write!(f, "{}", cells),
+            Prop::Reg(ranges) => {
+                let mut iter = ranges.iter();
+                if let Some(range) = iter.next() {
+                    write!(f, "{:?}", range)?;
+                }
+                for range in iter {
+                    write!(f, "; {:?}", range)?;
+                }
+                Ok(())
+            }
             Prop::Any { name: _, value } => {
                 write!(f, "{:?}", value)
             }
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct RangeList<'fdt> {
+    address_bytes: u32,
+    size_bytes: u32,
+    data: &'fdt [u8],
+}
+
+#[derive(Copy, Clone)]
+pub struct Range {
+    pub address: u64,
+    pub len: u64,
+}
+
+impl Debug for Range {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "{:#x} - {:#x} ({:#x})",
+            self.address,
+            self.address + self.len,
+            self.len
+        )
+    }
+}
+
+impl<'fdt> RangeList<'fdt> {
+    pub fn iter(&self) -> impl Iterator<Item = Range> {
+        self.data
+            .chunks_exact((self.address_bytes + self.size_bytes) as usize)
+            .map(|chunk| {
+                let (address, len) = chunk.split_at(self.address_bytes as usize);
+                let address = Fdt::int_cell(self.address_bytes, address);
+                let len = Fdt::int_cell(self.size_bytes, len);
+                Range { address, len }
+            })
     }
 }
 
