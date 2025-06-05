@@ -83,6 +83,14 @@ impl<'fdt> Fdt<'fdt> {
             .expect("Invalid UTF-8 in device tree")
     }
 
+    fn str_slice(slice: &'fdt [u8]) -> &'fdt str {
+        let Some((0, slice)) = slice.split_last() else {
+            panic!("Malformed device tree string: {:?}", slice);
+        };
+
+        str::from_utf8(slice).expect("Expected UTF-8 device tree string")
+    }
+
     fn as_ptr(&self) -> NonNull<u8> {
         NonNull::from(self.0).cast::<u8>()
     }
@@ -159,6 +167,9 @@ pub enum Token<'fdt> {
 
 pub enum Prop<'fdt> {
     Compatible(StrList<'fdt>),
+    Model(&'fdt str),
+    AddressCells(u32),
+    SizeCells(u32),
     Any { name: &'fdt str, value: &'fdt [u8] },
 }
 
@@ -166,6 +177,9 @@ impl<'fdt> Prop<'fdt> {
     fn new(name: &'fdt str, value: &'fdt [u8]) -> Self {
         match name {
             "compatible" => Prop::Compatible(StrList(value)),
+            "model" => Prop::Model(Fdt::str_slice(value)),
+            "#address-cells" => Prop::AddressCells(u32::from_be_bytes(value.try_into().unwrap())),
+            "#size-cells" => Prop::SizeCells(u32::from_be_bytes(value.try_into().unwrap())),
             name => Prop::Any { name, value },
         }
     }
@@ -173,9 +187,18 @@ impl<'fdt> Prop<'fdt> {
 
 impl Debug for Prop<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let name = match self {
+            Prop::Compatible(_) => "compatible",
+            Prop::Model(_) => "model",
+            Prop::AddressCells(_) => "#address-cells",
+            Prop::SizeCells(_) => "#size-cells",
+            Prop::Any { name, value: _ } => name,
+        };
+
+        write!(f, "{}: ", name)?;
+
         match self {
             Prop::Compatible(list) => {
-                write!(f, "compatible: ")?;
                 let mut iter = list.iter();
                 if let Some(string) = iter.next() {
                     write!(f, "{}", string)?;
@@ -185,8 +208,10 @@ impl Debug for Prop<'_> {
                 }
                 Ok(())
             }
-            Prop::Any { name, value } => {
-                write!(f, "{}: {:?}", name, value)
+            Prop::Model(model) => write!(f, "{}", model),
+            Prop::AddressCells(cells) | Prop::SizeCells(cells) => write!(f, "{}", cells),
+            Prop::Any { name: _, value } => {
+                write!(f, "{:?}", value)
             }
         }
     }
