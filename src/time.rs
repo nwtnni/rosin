@@ -7,44 +7,69 @@ use aarch64_cpu::registers::CNTPCT_EL0;
 use tock_registers::interfaces::Readable as _;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
-pub struct Instant(u64);
+pub struct Instant(Cycle);
 
 impl From<Instant> for Duration {
-    fn from(Instant(count): Instant) -> Self {
-        let frequency = frequency();
-        let s = count / frequency;
-        let ns = (count % frequency) * 10u64.pow(9) / frequency;
-        Duration::new(s, ns as u32)
+    fn from(instant: Instant) -> Self {
+        Duration::from(instant.0)
     }
 }
 
 impl Add<Duration> for Instant {
     type Output = Self;
-    fn add(self, rhs: Duration) -> Self::Output {
-        let frequency = frequency();
-
-        let s = rhs.as_secs() * frequency;
-        let ns = (rhs.subsec_nanos() as u64 * frequency) / 10u64.pow(9);
-
-        Self(self.0 + s + ns)
+    fn add(self, delta: Duration) -> Self::Output {
+        Self(self.0 + Cycle::from(delta))
     }
 }
 
 impl Instant {
     pub fn now() -> Self {
         asm::barrier::isb(asm::barrier::SY);
-        Instant(CNTPCT_EL0.get())
+        Instant(Cycle(CNTPCT_EL0.get()))
     }
 }
 
-pub fn resolution() -> Duration {
-    Duration::from(Instant(1))
+#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
+pub struct Cycle(u64);
+
+impl Cycle {
+    pub const ONE: Cycle = Cycle(1);
+
+    // TOOD: hide
+    pub fn value(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<Duration> for Cycle {
+    fn from(duration: Duration) -> Self {
+        let frequency = frequency();
+        let s = duration.as_secs() * frequency;
+        let ns = duration.subsec_nanos() as u64 * frequency / 10u64.pow(9);
+        Self(s + ns)
+    }
+}
+
+impl From<Cycle> for Duration {
+    fn from(Cycle(cycle): Cycle) -> Self {
+        let frequency = frequency();
+        let s = cycle / frequency;
+        let ns = (cycle % frequency) * 10u64.pow(9) / frequency;
+        Duration::new(s, ns as u32)
+    }
+}
+
+impl Add for Cycle {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
 }
 
 pub fn spin(duration: Duration) {
     let start = Instant::now();
     let stop = start + duration;
-    while CNTPCT_EL0.get() < stop.0 {}
+    while CNTPCT_EL0.get() < stop.0.0 {}
 }
 
 fn frequency() -> u64 {

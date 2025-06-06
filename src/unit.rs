@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 use core::fmt::LowerHex;
+use core::marker::PhantomData;
 
 pub type Byte = Mem<0>;
 

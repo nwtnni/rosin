@@ -4,6 +4,7 @@
 pub mod print;
 
 pub mod dev;
+pub mod irq;
 pub mod mmu;
 mod sync;
 pub mod time;
@@ -33,6 +34,10 @@ pub fn _print(args: core::fmt::Arguments) {
 }
 
 pub fn initialize() {
+    unsafe {
+        irq::init();
+    }
+
     UART.lock().initialize();
 }
 

@@ -69,13 +69,24 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
     let level = CurrentEL.get();
 
     if level >= 3 {
-        SCR_EL3.write(SCR_EL3::RW::NextELIsAarch64);
+        SCR_EL3.write(
+            SCR_EL3::RW::NextELIsAarch64
+                + SCR_EL3::EA::NotTaken
+                + SCR_EL3::FIQ::NotTaken
+                + SCR_EL3::IRQ::NotTaken,
+        );
     }
 
     if level >= 2 {
         CNTHCTL_EL2.write(CNTHCTL_EL2::EL1PCEN::SET + CNTHCTL_EL2::EL1PCTEN::SET);
         CNTVOFF_EL2.set(0);
-        HCR_EL2.write(HCR_EL2::RW::EL1IsAarch64);
+        HCR_EL2.write(
+            HCR_EL2::RW::EL1IsAarch64
+                + HCR_EL2::E2H::DisableOsAtEl2
+                + HCR_EL2::AMO::CLEAR
+                + HCR_EL2::IMO::DisableVirtualIRQ
+                + HCR_EL2::FMO::DisableVirtualFIQ,
+        );
     }
 
     #[allow(clippy::fn_to_numeric_cast)]
@@ -120,25 +131,29 @@ fn _start_kernel(_device_tree: u32) -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
 
-    let device_tree = &dev::bcm2837b0::DTB;
+    rosin::irq::enable();
+    rosin::info!("Interrupt in 1 second...");
+    rosin::irq::enable_timer(Duration::from_secs(1));
 
-    rosin::info!("Device tree header: {:#x?}", device_tree.header());
+    // let device_tree = &dev::bcm2837b0::DTB;
 
-    let mut indent = 0;
-    for token in device_tree.iter() {
-        match token {
-            dev::tree::Token::Begin { name } => {
-                rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
-                indent += 1;
-            }
-            dev::tree::Token::Prop(prop) => {
-                rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
-            }
-            dev::tree::Token::End => indent -= 1,
-        }
-    }
+    // rosin::info!("Device tree header: {:#x?}", device_tree.header());
 
-    rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
+    // let mut indent = 0;
+    // for token in device_tree.iter() {
+    //     match token {
+    //         dev::tree::Token::Begin { name } => {
+    //             rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
+    //             indent += 1;
+    //         }
+    //         dev::tree::Token::Prop(prop) => {
+    //             rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
+    //         }
+    //         dev::tree::Token::End => indent -= 1,
+    //     }
+    // }
+    //
+    // rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
 
     for _ in 0..2 {
         rosin::info!("Sleeping for 1s...");
