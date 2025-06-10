@@ -1,10 +1,12 @@
 [workspace]
 resolver = "3"
 members = [
+    "device-tree",
     "kernel",
 ]
 
 [workspace.dependencies]
 aarch64-cpu = "10.0"
 arrayvec = { version = "0.7", default-features = false }
+device-tree.path = "device-tree"
 tock-registers = "0.9"

@@ -152,14 +152,14 @@ fn _start_kernel(_device_tree: u32) -> ! {
     let mut indent = 0;
     for token in device_tree.iter() {
         match token {
-            dev::tree::Token::Begin { name } => {
+            device_tree::blob::Token::Begin { name } => {
                 kernel::info!("{:|<width$}{}", "", name, width = indent * 2);
                 indent += 1;
             }
-            dev::tree::Token::Prop(prop) => {
+            device_tree::blob::Token::Prop(prop) => {
                 kernel::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
             }
-            dev::tree::Token::End => indent -= 1,
+            device_tree::blob::Token::End => indent -= 1,
         }
     }
 

@@ -6,7 +6,10 @@ use core::ptr::NonNull;
 
 use arrayvec::ArrayVec;
 
-use crate::unit;
+use crate::Be32;
+use crate::RangeList;
+use crate::RegList;
+use crate::StrList;
 
 pub struct Blob<'dtb>(&'dtb [u8]);
 
@@ -103,16 +106,7 @@ impl<'dtb> Blob<'dtb> {
         str::from_utf8(slice).expect("Expected UTF-8 device tree string")
     }
 
-    fn int_cell(cells: Cell, data: &'dtb [u8]) -> u64 {
-        match cells.value() {
-            0 => 0,
-            1 => u32::from_be_bytes(data.try_into().unwrap()) as u64,
-            2 => u64::from_be_bytes(data.try_into().unwrap()),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn as_ptr(&self) -> NonNull<u8> {
+    pub fn as_ptr(&self) -> NonNull<u8> {
         NonNull::from(self.0).cast::<u8>()
     }
 }
@@ -173,24 +167,17 @@ pub struct Header<'dtb> {
     _dtb: PhantomData<&'dtb ()>,
 }
 
-#[repr(C, align(8))]
-#[derive(Copy, Clone, Debug)]
-pub struct Reservation {
-    address: Be64,
-    size: Be64,
-}
-
 #[derive(Debug)]
 struct Context {
-    address: Cell,
-    size: Cell,
+    address_cells: u32,
+    size_cells: u32,
 }
 
 impl Default for Context {
     fn default() -> Self {
         Self {
-            address: unit::Byte::new(2).convert(),
-            size: unit::Byte::new(2).convert(),
+            address_cells: 8,
+            size_cells: 4,
         }
     }
 }
@@ -204,8 +191,8 @@ pub enum Token<'dtb> {
 pub enum Prop<'dtb> {
     Compatible(StrList<'dtb>),
     Model(&'dtb str),
-    AddressCells(Cell),
-    SizeCells(Cell),
+    AddressCells(u32),
+    SizeCells(u32),
     Reg(RegList<'dtb>),
     Ranges(RangeList<'dtb>),
     Any { name: &'dtb str, value: &'dtb [u8] },
@@ -214,33 +201,33 @@ pub enum Prop<'dtb> {
 impl<'dtb> Prop<'dtb> {
     fn new(context: &mut [Context], name: &'dtb str, value: &'dtb [u8]) -> Self {
         match name {
-            "compatible" => Prop::Compatible(StrList(value)),
+            "compatible" => Prop::Compatible(StrList::new(value)),
             "model" => Prop::Model(Blob::str_slice(value)),
             "#address-cells" => {
-                let address = Cell::new(u32::from_be_bytes(value.try_into().unwrap()) as usize);
-                context.last_mut().unwrap().address = address;
+                let address = u32::from_be_bytes(value.try_into().unwrap());
+                context.last_mut().unwrap().address_cells = address;
                 Prop::AddressCells(address)
             }
             "#size-cells" => {
-                let size = Cell::new(u32::from_be_bytes(value.try_into().unwrap()) as usize);
-                context.last_mut().unwrap().size = size;
+                let size = u32::from_be_bytes(value.try_into().unwrap());
+                context.last_mut().unwrap().size_cells = size;
                 Prop::SizeCells(size)
             }
             "reg" => {
                 let parent = &context[context.len() - 2];
-                Prop::Reg(RegList {
-                    address: parent.address.convert(),
-                    size: parent.address.convert(),
-                    data: value,
-                })
+                Prop::Reg(RegList::new(
+                    parent.address_cells as u64 * 4,
+                    parent.size_cells as u64 * 4,
+                    value,
+                ))
             }
             "ranges" => {
                 let parent = &context[context.len() - 2];
-                Prop::Ranges(RangeList {
-                    address: parent.address.convert(),
-                    size: parent.address.convert(),
-                    data: value,
-                })
+                Prop::Ranges(RangeList::new(
+                    parent.address_cells as u64 * 4,
+                    parent.size_cells as u64 * 4,
+                    value,
+                ))
             }
             name => Prop::Any { name, value },
         }
@@ -262,186 +249,14 @@ impl Debug for Prop<'_> {
         write!(f, "{}: ", name)?;
 
         match self {
-            Prop::Compatible(list) => {
-                let mut iter = list.iter();
-                if let Some(string) = iter.next() {
-                    write!(f, "{}", string)?;
-                }
-                for string in iter {
-                    write!(f, "; {}", string)?;
-                }
-                Ok(())
-            }
+            Prop::Compatible(strings) => write!(f, "{:?}", strings),
             Prop::Model(model) => write!(f, "{}", model),
             Prop::AddressCells(cells) | Prop::SizeCells(cells) => write!(f, "{:?}", cells),
-            Prop::Reg(ranges) => {
-                let mut iter = ranges.iter();
-                if let Some(range) = iter.next() {
-                    write!(f, "{:?}", range)?;
-                }
-                for range in iter {
-                    write!(f, "; {:?}", range)?;
-                }
-                Ok(())
-            }
-            Prop::Ranges(ranges) => {
-                let mut iter = ranges.iter();
-                if let Some(range) = iter.next() {
-                    write!(f, "{:?}", range)?;
-                }
-                for range in iter {
-                    write!(f, "; {:?}", range)?;
-                }
-                Ok(())
-            }
+            Prop::Reg(reg) => write!(f, "{:?}", reg),
+            Prop::Ranges(ranges) => write!(f, "{:?}", ranges),
             Prop::Any { name: _, value } => {
                 write!(f, "{:?}", value)
             }
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct RangeList<'dtb> {
-    address: Cell,
-    size: Cell,
-    data: &'dtb [u8],
-}
-
-impl<'dtb> RangeList<'dtb> {
-    pub fn iter(&self) -> impl Iterator<Item = Range> {
-        let address: unit::Byte = self.address.convert();
-        let len: unit::Byte = self.size.convert();
-
-        self.data
-            .chunks_exact(address.value() * 2 + len.value())
-            .map(move |chunk| {
-                let (child, chunk) = chunk.split_at(address.value());
-                let (parent, len) = chunk.split_at(address.value());
-                let parent = Blob::int_cell(self.address, parent);
-                let child = Blob::int_cell(self.address, child);
-                let len = Blob::int_cell(self.size, len);
-                Range {
-                    child,
-                    parent,
-                    len: unit::Byte::new(len as usize),
-                }
-            })
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Range {
-    pub child: u64,
-    pub parent: u64,
-    pub len: unit::Byte,
-}
-
-impl Debug for Range {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "{:#x} = {:#x} ({:#x})",
-            self.child, self.parent, self.len,
-        )
-    }
-}
-
-#[derive(Clone)]
-pub struct RegList<'dtb> {
-    address: Cell,
-    size: Cell,
-    data: &'dtb [u8],
-}
-
-impl<'dtb> RegList<'dtb> {
-    pub fn iter(&self) -> impl Iterator<Item = Reg> {
-        let address: unit::Byte = self.address.convert();
-        let len: unit::Byte = self.size.convert();
-
-        self.data
-            .chunks_exact(address.value() + len.value())
-            .map(move |chunk| {
-                let (address, len) = chunk.split_at(address.value());
-                let address = Blob::int_cell(self.address, address);
-                let len = Blob::int_cell(self.size, len);
-                Reg {
-                    address,
-                    len: unit::Byte::new(len as usize),
-                }
-            })
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct Reg {
-    pub address: u64,
-    pub len: unit::Byte,
-}
-
-impl Debug for Reg {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "{:#x} - {:#x} ({:#x})",
-            self.address,
-            self.address + self.len.value() as u64,
-            self.len,
-        )
-    }
-}
-
-#[derive(Clone)]
-pub struct StrList<'dtb>(&'dtb [u8]);
-
-impl<'dtb> StrList<'dtb> {
-    pub fn iter(&self) -> impl Iterator<Item = &'dtb str> {
-        self.0
-            .split(|byte| *byte == 0)
-            .filter(|str| !str.is_empty())
-            .map(str::from_utf8)
-            .map(Result::unwrap)
-    }
-}
-
-type Cell = unit::Mem<2>;
-
-#[repr(transparent)]
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct Be32(u32);
-
-impl From<Be32> for u32 {
-    fn from(Be32(value): Be32) -> Self {
-        if cfg!(target_endian = "little") {
-            value.swap_bytes()
-        } else {
-            value
-        }
-    }
-}
-
-impl Debug for Be32 {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        u32::from(*self).fmt(f)
-    }
-}
-
-#[repr(transparent)]
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct Be64(u64);
-
-impl From<Be64> for u64 {
-    fn from(Be64(value): Be64) -> Self {
-        if cfg!(target_endian = "little") {
-            value.swap_bytes()
-        } else {
-            value
-        }
-    }
-}
-
-impl Debug for Be64 {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        u64::from(*self).fmt(f)
     }
 }

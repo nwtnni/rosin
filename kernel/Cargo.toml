@@ -8,3 +8,4 @@ edition = "2024"
 aarch64-cpu.workspace = true
 arrayvec.workspace = true
 tock-registers.workspace = true
+device-tree.workspace = true
