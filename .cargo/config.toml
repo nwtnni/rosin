@@ -2,5 +2,4 @@
 target = "aarch64-unknown-none-softfloat"
 rustflags = [
     "-C", "target-cpu=cortex-a53",
-    "-C", "link-arg=--script=pi.ld",
 ]

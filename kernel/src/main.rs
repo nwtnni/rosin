@@ -5,11 +5,6 @@ use core::fmt::Write as _;
 
 use aarch64_cpu::asm;
 use aarch64_cpu::registers::CNTHCTL_EL2;
-use aarch64_cpu::registers::CNTHP_CTL_EL2;
-use aarch64_cpu::registers::CNTKCTL_EL1;
-use aarch64_cpu::registers::CNTP_CTL_EL0;
-use aarch64_cpu::registers::CNTPCT_EL0;
-use aarch64_cpu::registers::CNTVOFF_EL2;
 use aarch64_cpu::registers::CurrentEL;
 use aarch64_cpu::registers::ELR_EL2;
 use aarch64_cpu::registers::ELR_EL3;
@@ -18,7 +13,7 @@ use aarch64_cpu::registers::SCR_EL3;
 use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
-use rosin::dev;
+use kernel::dev;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
 
@@ -134,50 +129,50 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
 
 #[unsafe(no_mangle)]
 fn _start_kernel(_device_tree: u32) -> ! {
-    rosin::initialize();
-    rosin::info!("Hello, world!");
-    rosin::info!(
+    kernel::initialize();
+    kernel::info!("Hello, world!");
+    kernel::info!(
         "Resolution: {}ns, frequency: {}hz",
-        Duration::from(rosin::time::Cycle::ONE).as_nanos(),
-        rosin::time::frequency(),
+        Duration::from(kernel::time::Cycle::ONE).as_nanos(),
+        kernel::time::frequency(),
     );
 
-    rosin::info!(
+    kernel::info!(
         "Interrupt in 1 second... EL: {}",
         CurrentEL.read(CurrentEL::EL)
     );
 
-    rosin::irq::enable();
-    rosin::irq::enable_timer(Duration::from_secs(1));
+    kernel::irq::enable();
+    kernel::irq::enable_timer(Duration::from_secs(1));
 
     let device_tree = &dev::bcm2837b0::DTB;
 
-    rosin::info!("Device tree header: {:#x?}", device_tree.header());
+    kernel::info!("Device tree header: {:#x?}", device_tree.header());
 
     let mut indent = 0;
     for token in device_tree.iter() {
         match token {
             dev::tree::Token::Begin { name } => {
-                rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
+                kernel::info!("{:|<width$}{}", "", name, width = indent * 2);
                 indent += 1;
             }
             dev::tree::Token::Prop(prop) => {
-                rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
+                kernel::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
             }
             dev::tree::Token::End => indent -= 1,
         }
     }
 
     for _ in 0..2 {
-        rosin::info!("Sleeping for 1s...");
-        rosin::time::spin(Duration::from_secs(1));
+        kernel::info!("Sleeping for 1s...");
+        kernel::time::spin(Duration::from_secs(1));
     }
 
-    rosin::info!("Echo:");
+    kernel::info!("Echo:");
     let mut buffer = [0u8];
     loop {
-        rosin::UART.lock().read(&mut buffer).unwrap();
-        rosin::print!(
+        kernel::UART.lock().read(&mut buffer).unwrap();
+        kernel::print!(
             "{}",
             match buffer[0] {
                 b'\r' => '\n',
@@ -193,7 +188,7 @@ use core::time::Duration;
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     let _ = writeln!(
-        rosin::Console,
+        kernel::Console,
         "[PANIC][{}:{}] {}",
         _info
             .location()
@@ -206,5 +201,5 @@ fn panic(_info: &PanicInfo) -> ! {
         _info.message(),
     );
 
-    rosin::spin()
+    kernel::spin()
 }
