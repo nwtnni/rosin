@@ -5,6 +5,6 @@ authors = ["Newton Ni <nwtnni@gmail.com>"]
 edition = "2024"
 
 [dependencies]
-aarch64-cpu = "10.0"
-arrayvec = { version = "0.7", default-features = false }
-tock-registers = "0.9"
+aarch64-cpu.workspace = true
+arrayvec.workspace = true
+tock-registers.workspace = true
