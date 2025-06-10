@@ -6,6 +6,8 @@ use aarch64_cpu::registers::CNTFRQ_EL0;
 use aarch64_cpu::registers::CNTPCT_EL0;
 use tock_registers::interfaces::Readable as _;
 
+use crate::dev::bcm2837b0;
+
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct Instant(Cycle);
 
@@ -72,6 +74,6 @@ pub fn spin(duration: Duration) {
     while CNTPCT_EL0.get() < stop.0.0 {}
 }
 
-fn frequency() -> u64 {
+pub fn frequency() -> u64 {
     CNTFRQ_EL0.get()
 }

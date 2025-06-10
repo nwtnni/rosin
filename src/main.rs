@@ -5,6 +5,10 @@ use core::fmt::Write as _;
 
 use aarch64_cpu::asm;
 use aarch64_cpu::registers::CNTHCTL_EL2;
+use aarch64_cpu::registers::CNTHP_CTL_EL2;
+use aarch64_cpu::registers::CNTKCTL_EL1;
+use aarch64_cpu::registers::CNTP_CTL_EL0;
+use aarch64_cpu::registers::CNTPCT_EL0;
 use aarch64_cpu::registers::CNTVOFF_EL2;
 use aarch64_cpu::registers::CurrentEL;
 use aarch64_cpu::registers::ELR_EL2;
@@ -66,7 +70,7 @@ _start:
 
 #[unsafe(no_mangle)]
 extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, stack: u64) -> ! {
-    let level = CurrentEL.get();
+    let level = CurrentEL.read(CurrentEL::EL);
 
     if level >= 3 {
         SCR_EL3.write(
@@ -79,28 +83,19 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
 
     if level >= 2 {
         CNTHCTL_EL2.write(CNTHCTL_EL2::EL1PCEN::SET + CNTHCTL_EL2::EL1PCTEN::SET);
-        CNTVOFF_EL2.set(0);
         HCR_EL2.write(
             HCR_EL2::RW::EL1IsAarch64
                 + HCR_EL2::E2H::DisableOsAtEl2
                 + HCR_EL2::AMO::CLEAR
                 + HCR_EL2::IMO::DisableVirtualIRQ
-                + HCR_EL2::FMO::DisableVirtualFIQ,
+                + HCR_EL2::FMO::DisableVirtualFIQ
+                + HCR_EL2::TGE::DisableTrapGeneralExceptionsToEl2
+                + HCR_EL2::E2H::DisableOsAtEl2,
         );
     }
 
     #[allow(clippy::fn_to_numeric_cast)]
     match level {
-        2 => {
-            ELR_EL2.set(_start_kernel as u64);
-            SPSR_EL2.write(
-                SPSR_EL2::D::Masked
-                    + SPSR_EL2::A::Masked
-                    + SPSR_EL2::I::Masked
-                    + SPSR_EL2::F::Masked
-                    + SPSR_EL2::M::EL1h,
-            );
-        }
         3 => {
             ELR_EL3.set(_start_kernel as u64);
             SPSR_EL3.write(
@@ -111,7 +106,18 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
                     + SPSR_EL3::M::EL1h,
             );
         }
-        _ => _start_kernel(device_tree),
+        2 => {
+            ELR_EL2.set(_start_kernel as u64);
+            SPSR_EL2.write(
+                SPSR_EL2::D::Masked
+                    + SPSR_EL2::A::Masked
+                    + SPSR_EL2::I::Masked
+                    + SPSR_EL2::F::Masked
+                    + SPSR_EL2::M::EL1h,
+            );
+        }
+        1 => _start_kernel(device_tree),
+        level => unreachable!("Unexpected exception level: {}", level),
     }
 
     SP_EL1.set(stack);
@@ -130,30 +136,37 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
 fn _start_kernel(_device_tree: u32) -> ! {
     rosin::initialize();
     rosin::info!("Hello, world!");
+    rosin::info!(
+        "Resolution: {}ns, frequency: {}hz",
+        Duration::from(rosin::time::Cycle::ONE).as_nanos(),
+        rosin::time::frequency(),
+    );
+
+    rosin::info!(
+        "Interrupt in 1 second... EL: {}",
+        CurrentEL.read(CurrentEL::EL)
+    );
 
     rosin::irq::enable();
-    rosin::info!("Interrupt in 1 second...");
     rosin::irq::enable_timer(Duration::from_secs(1));
 
-    // let device_tree = &dev::bcm2837b0::DTB;
+    let device_tree = &dev::bcm2837b0::DTB;
 
-    // rosin::info!("Device tree header: {:#x?}", device_tree.header());
+    rosin::info!("Device tree header: {:#x?}", device_tree.header());
 
-    // let mut indent = 0;
-    // for token in device_tree.iter() {
-    //     match token {
-    //         dev::tree::Token::Begin { name } => {
-    //             rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
-    //             indent += 1;
-    //         }
-    //         dev::tree::Token::Prop(prop) => {
-    //             rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
-    //         }
-    //         dev::tree::Token::End => indent -= 1,
-    //     }
-    // }
-    //
-    // rosin::info!("Resolution: {}ns", rosin::time::resolution().as_nanos());
+    let mut indent = 0;
+    for token in device_tree.iter() {
+        match token {
+            dev::tree::Token::Begin { name } => {
+                rosin::info!("{:|<width$}{}", "", name, width = indent * 2);
+                indent += 1;
+            }
+            dev::tree::Token::Prop(prop) => {
+                rosin::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
+            }
+            dev::tree::Token::End => indent -= 1,
+        }
+    }
 
     for _ in 0..2 {
         rosin::info!("Sleeping for 1s...");

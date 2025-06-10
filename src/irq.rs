@@ -8,6 +8,7 @@ use aarch64_cpu::registers::ReadWriteable as _;
 use aarch64_cpu::registers::VBAR_EL1;
 use tock_registers::interfaces::Writeable as _;
 
+use crate::dev::bcm2837b0;
 use crate::time;
 
 global_asm! {
@@ -34,7 +35,7 @@ r#"
     PUSH x24, x25
     PUSH x26, x27
     PUSH x28, x29
-    str x30, [sp, -16]!
+    PUSH x30, xzr
 .endmacro
 
 .macro POP x, y
@@ -42,7 +43,7 @@ r#"
 .endmacro
 
 .macro IRQ_LEAVE
-    ldr x30, [sp], 16
+    POP x30, xzr
     POP x28, x29
     POP x26, x27
     POP x24, x25
@@ -66,14 +67,15 @@ r#"
     b \label
 .endmacro
 
+.align 11
 __VECTOR_TABLE:
     VECTOR irq_invalid
-    VECTOR irq_el1t
+    VECTOR irq_invalid
     VECTOR irq_invalid
     VECTOR irq_invalid
 
     VECTOR irq_invalid
-    VECTOR irq_invalid
+    VECTOR irq_el1t
     VECTOR irq_invalid
     VECTOR irq_invalid
 
@@ -93,10 +95,12 @@ irq_el1t:
     IRQ_LEAVE
 
 irq_invalid:
+    IRQ_ENTER
+    bl handle_irq_invalid
 
-irq_hang:
+irq_spin:
     wfe
-    b irq_invalid
+    b irq_spin
 
 .global __VECTOR_TABLE
 .size __VECTOR_TABLE, . - __VECTOR_TABLE
@@ -106,11 +110,14 @@ irq_hang:
 }
 
 unsafe extern "C" {
-    static __VECTOR_TABLE: u64;
+    static __VECTOR_TABLE: u32;
 }
 
 pub unsafe fn init() {
-    VBAR_EL1.set(unsafe { __VECTOR_TABLE });
+    VBAR_EL1.set(unsafe { &__VECTOR_TABLE as *const _ as u64 });
+
+    unsafe { bcm2837b0::ic::Peripheral::new(0x3F00_B000) }.init();
+    unsafe { bcm2837b0::ic::Core::new(0x4000_0000) }.init();
 }
 
 pub fn enable() {
@@ -124,5 +131,10 @@ pub fn enable_timer(duration: Duration) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handle_irq_el1t() {
-    info!("here",);
+    info!("handle",);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn handle_irq_invalid() {
+    info!("invalid",);
 }

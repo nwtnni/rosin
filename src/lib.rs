@@ -14,6 +14,7 @@ use core::fmt::Debug;
 use core::fmt::Write;
 
 use aarch64_cpu::asm;
+use dev::bcm2837b0;
 use sync::SpinLock;
 
 #[inline]
@@ -34,11 +35,13 @@ pub fn _print(args: core::fmt::Arguments) {
 }
 
 pub fn initialize() {
+    UART.lock().initialize();
+
     unsafe {
+        // bcm2837b0::clock::Clock::new(0x4000_0000).init();
+
         irq::init();
     }
-
-    UART.lock().initialize();
 }
 
 pub static UART: SpinLock<dev::bcm2837b0::uart::Uart> =
