@@ -31,21 +31,34 @@ pub fn spin() -> ! {
 
 #[doc(hidden)]
 pub fn _print(args: core::fmt::Arguments) {
-    UART.lock().write_fmt(args).unwrap();
+    // UART.lock().write_fmt(args).unwrap();
+    // UART_MINI.lock().write_fmt(args).unwrap();
+    unsafe { dev::bcm2837b0::mini::Uart::new(0x3F21_5000) }
+        .write_fmt(args)
+        .unwrap();
 }
 
-pub fn initialize() {
-    UART.lock().initialize();
-
+pub fn init() {
     unsafe {
-        // bcm2837b0::clock::Clock::new(0x4000_0000).init();
-
-        irq::init();
+        bcm2837b0::gpio::Gpio::new(0x3F20_0000).init();
+        dev::bcm2837b0::mini::Uart::new(0x3F21_5000).init();
     }
+
+    // UART.lock().initialize();
+    // UART_MINI.lock().init();
+
+    // unsafe {
+    //     // bcm2837b0::clock::Clock::new(0x4000_0000).init();
+    //
+    //     irq::init();
+    // }
 }
 
 pub static UART: SpinLock<dev::bcm2837b0::uart::Uart> =
     SpinLock::new(unsafe { dev::bcm2837b0::uart::Uart::new(0x3F20_1000) });
+
+pub static UART_MINI: SpinLock<dev::bcm2837b0::mini::Uart> =
+    SpinLock::new(unsafe { dev::bcm2837b0::mini::Uart::new(0x3F21_5000) });
 
 pub type Result<T> = core::result::Result<T, Error>;
 

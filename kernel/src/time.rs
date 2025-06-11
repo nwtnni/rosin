@@ -24,6 +24,13 @@ impl Add<Duration> for Instant {
     }
 }
 
+impl Add<Cycle> for Instant {
+    type Output = Self;
+    fn add(self, delta: Cycle) -> Self::Output {
+        Self(self.0 + delta)
+    }
+}
+
 impl Instant {
     pub fn now() -> Self {
         asm::barrier::isb(asm::barrier::SY);
@@ -36,6 +43,10 @@ pub struct Cycle(u64);
 
 impl Cycle {
     pub const ONE: Cycle = Cycle(1);
+
+    pub const fn new(count: u64) -> Self {
+        Self(count)
+    }
 
     // TOOD: hide
     pub fn value(self) -> u64 {
@@ -69,6 +80,12 @@ impl Add for Cycle {
 }
 
 pub fn spin(duration: Duration) {
+    let start = Instant::now();
+    let stop = start + duration;
+    while CNTPCT_EL0.get() < stop.0.0 {}
+}
+
+pub fn spin_cycle(duration: Cycle) {
     let start = Instant::now();
     let stop = start + duration;
     while CNTPCT_EL0.get() < stop.0.0 {}

@@ -27,6 +27,7 @@
             nativeBuildInputs = [
               # https://ryantm.github.io/nixpkgs/stdenv/cross-compilation/#sec-cross-infra
               (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+              pkgs.minicom
             ];
 
             # Maybe the clearest explanation of the Nix cross-compilation model:

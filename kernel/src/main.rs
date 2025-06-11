@@ -13,6 +13,7 @@ use aarch64_cpu::registers::SCR_EL3;
 use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
+use kernel::UART_MINI;
 use kernel::dev;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
@@ -129,49 +130,53 @@ extern "C" fn _start_hypervisor(device_tree: u32, _x1: u64, _x2: u64, _x3: u64, 
 
 #[unsafe(no_mangle)]
 fn _start_kernel(_device_tree: u32) -> ! {
-    kernel::initialize();
-    kernel::info!("Hello, world!");
+    kernel::init();
+
+    kernel::info!("Hello, world! EL: {}", CurrentEL.read(CurrentEL::EL));
     kernel::info!(
         "Resolution: {}ns, frequency: {}hz",
         Duration::from(kernel::time::Cycle::ONE).as_nanos(),
         kernel::time::frequency(),
     );
 
-    kernel::info!(
-        "Interrupt in 1 second... EL: {}",
-        CurrentEL.read(CurrentEL::EL)
-    );
+    // kernel::info!(
+    //     "Interrupt in 1 second... EL: {}",
+    //     CurrentEL.read(CurrentEL::EL)
+    // );
+    //
+    // kernel::irq::enable();
+    // kernel::irq::enable_timer(Duration::from_secs(1));
 
-    kernel::irq::enable();
-    kernel::irq::enable_timer(Duration::from_secs(1));
+    // let device_tree = &dev::bcm2837b0::DTB;
+    //
+    // kernel::info!("Device tree header: {:#x?}", device_tree.header());
+    //
+    // let mut indent = 0;
+    // for token in device_tree.iter() {
+    //     match token {
+    //         device_tree::blob::Token::Begin { name } => {
+    //             kernel::info!("{:|<width$}{}", "", name, width = indent * 2);
+    //             indent += 1;
+    //         }
+    //         device_tree::blob::Token::Prop(prop) => {
+    //             kernel::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
+    //         }
+    //         device_tree::blob::Token::End => indent -= 1,
+    //     }
+    // }
+    //
+    // for _ in 0..2 {
+    //     kernel::info!("Sleeping for 1s...");
+    //     kernel::time::spin(Duration::from_secs(1));
+    // }
 
-    let device_tree = &dev::bcm2837b0::DTB;
-
-    kernel::info!("Device tree header: {:#x?}", device_tree.header());
-
-    let mut indent = 0;
-    for token in device_tree.iter() {
-        match token {
-            device_tree::blob::Token::Begin { name } => {
-                kernel::info!("{:|<width$}{}", "", name, width = indent * 2);
-                indent += 1;
-            }
-            device_tree::blob::Token::Prop(prop) => {
-                kernel::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
-            }
-            device_tree::blob::Token::End => indent -= 1,
-        }
-    }
-
-    for _ in 0..2 {
-        kernel::info!("Sleeping for 1s...");
-        kernel::time::spin(Duration::from_secs(1));
-    }
-
-    kernel::info!("Echo:");
+    kernel::println!("Echo:");
     let mut buffer = [0u8];
     loop {
-        kernel::UART.lock().read(&mut buffer).unwrap();
+        unsafe { kernel::dev::bcm2837b0::mini::Uart::new(0x3F21_5000) }
+            .read(&mut buffer)
+            .unwrap();
+
         kernel::print!(
             "{}",
             match buffer[0] {
