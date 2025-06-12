@@ -43,7 +43,7 @@ _start:
 #[unsafe(link_section = ".text.start")]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start_rust(
-    device_tree: u32,
+    device_tree: u64,
     reserved_1: u64,
     reserved_2: u64,
     reserved_3: u64,

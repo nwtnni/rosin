@@ -32,7 +32,7 @@ use tock_registers::interfaces::Writeable as _;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start_hypervisor(
-    device_tree: u32,
+    device_tree: u64,
     _x1: u64,
     _x2: u64,
     _x3: u64,
@@ -101,7 +101,7 @@ pub extern "C" fn _start_hypervisor(
 }
 
 #[unsafe(no_mangle)]
-pub fn _start_kernel(device_tree: u32) -> ! {
+pub fn _start_kernel(device_tree: u64) -> ! {
     init();
 
     info!(

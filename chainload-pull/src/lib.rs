@@ -11,7 +11,7 @@ unsafe extern "C" {
     static __CHAINLOADER_INITIAL_LO: ffi::c_void;
 }
 
-pub fn main(device_tree: u32, reserved_1: u64, reserved_2: u64, reserved_3: u64) -> ! {
+pub fn main(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64) -> ! {
     unsafe { gpio::Gpio::new(0x3F20_0000).init() }
     let mut uart = unsafe { uart::Uart::new(0x3F21_5000) };
     uart.init();
@@ -48,7 +48,7 @@ pub fn main(device_tree: u32, reserved_1: u64, reserved_2: u64, reserved_3: u64)
 
     uart.flush();
 
-    (unsafe { mem::transmute::<*mut u8, fn(u32, u64, u64, u64) -> !>(base) })(
+    (unsafe { mem::transmute::<*mut u8, fn(u64, u64, u64, u64) -> !>(base) })(
         device_tree,
         reserved_1,
         reserved_2,
