@@ -95,8 +95,18 @@ fn main() {
         }
     }
 
-    let mut stdout = std::io::stdout().lock();
-    std::io::copy(&mut port, &mut stdout).unwrap();
+    std::thread::scope(|scope| {
+        let mut reader = port.try_clone().unwrap();
+        let mut writer = port;
+
+        scope.spawn(move || {
+            let mut stdout = std::io::stdout().lock();
+            std::io::copy(&mut reader, &mut stdout).unwrap();
+        });
+
+        let mut stdin = std::io::stdin().lock();
+        std::io::copy(&mut stdin, &mut writer).unwrap();
+    });
 }
 
 struct Memory(usize);
