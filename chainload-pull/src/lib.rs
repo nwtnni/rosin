@@ -24,21 +24,18 @@ pub fn main(device_tree: u32, reserved_1: u64, reserved_2: u64, reserved_3: u64)
     let mut len = 0;
 
     while len < 8 {
-        uart.read(&mut buffer);
-        len += (buffer[0] == 0xff) as usize;
+        len += (uart.read_byte() == 0xff) as usize;
     }
 
-    for i in 0..8 {
-        uart.read(&mut buffer[i..]);
-    }
+    buffer.iter_mut().for_each(|byte| *byte = uart.read_byte());
 
     let len = u64::from_le_bytes(buffer) as usize;
     let base = unsafe { &__CHAINLOADER_INITIAL_LO as *const ffi::c_void as *const u8 as *mut u8 };
 
     for i in 0..len {
-        uart.read(&mut buffer);
+        let byte = uart.read_byte();
         unsafe {
-            base.add(i).write_volatile(buffer[0]);
+            base.add(i).write_volatile(byte);
         }
     }
 

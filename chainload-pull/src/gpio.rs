@@ -48,6 +48,7 @@ impl Gpio {
     }
 }
 
+#[expect(dead_code)]
 enum Select {
     Input = 0b000,
     Output = 0b001,

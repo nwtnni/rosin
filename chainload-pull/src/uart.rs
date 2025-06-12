@@ -34,10 +34,9 @@ impl Uart {
             .write(Control::RX::Enable + Control::TX::Enable);
     }
 
-    pub fn read(&mut self, buffer: &mut [u8]) -> usize {
+    pub fn read_byte(&mut self) -> u8 {
         while !self.line_status.is_set(LineStatus::RX_READY) {}
-        buffer[0] = self.io.get() as u8;
-        1
+        self.io.get() as u8
     }
 
     pub fn write_byte(&mut self, byte: u8) {
