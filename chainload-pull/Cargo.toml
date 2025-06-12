@@ -1,0 +1,8 @@
+[package]
+name = "chainload-pull"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aarch64-cpu.workspace = true
+tock-registers.workspace = true

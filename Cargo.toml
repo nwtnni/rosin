@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
+    "chainload-pull",
+    "chainload-push",
     "device-tree",
     "kernel",
 ]

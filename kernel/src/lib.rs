@@ -188,10 +188,10 @@ pub fn _print(args: core::fmt::Arguments) {
 }
 
 pub fn init() {
-    unsafe {
-        bcm2837b0::gpio::Gpio::new(0x3F20_0000).init();
-        dev::bcm2837b0::mini::Uart::new(0x3F21_5000).init();
-    }
+    // unsafe {
+    //     bcm2837b0::gpio::Gpio::new(0x3F20_0000).init();
+    //     dev::bcm2837b0::mini::Uart::new(0x3F21_5000).init();
+    // }
 
     // UART.lock().initialize();
     // UART_MINI.lock().init();
