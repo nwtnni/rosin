@@ -13,6 +13,7 @@ mod unit;
 use core::fmt::Debug;
 use core::fmt::Write;
 use core::panic::PanicInfo;
+use core::ptr::NonNull;
 use core::time::Duration;
 
 use aarch64_cpu::asm;
@@ -25,7 +26,6 @@ use aarch64_cpu::registers::SCR_EL3;
 use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
-use dev::bcm2837b0;
 use sync::SpinLock;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
@@ -132,23 +132,24 @@ pub fn _start_kernel(device_tree: u64) -> ! {
 
     // let device_tree = &dev::bcm2837b0::DTB;
 
-    // if let Some(device_tree) = unsafe { (device_tree as *const device_tree::Blob).as_ref() } {
-    //     kernel::info!("Device tree header: {:#x?}", device_tree.header());
-    //
-    //     let mut indent = 0;
-    //     for token in device_tree.iter() {
-    //         match token {
-    //             device_tree::blob::Token::Begin { name } => {
-    //                 kernel::info!("{:|<width$}{}", "", name, width = indent * 2);
-    //                 indent += 1;
-    //             }
-    //             device_tree::blob::Token::Prop(prop) => {
-    //                 kernel::info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
-    //             }
-    //             device_tree::blob::Token::End => indent -= 1,
-    //         }
-    //     }
-    // }
+    let device_tree =
+        unsafe { device_tree::Blob::from_ptr(NonNull::new(device_tree as *mut u8).unwrap()) };
+
+    info!("Device tree header: {:#x?}", device_tree.header());
+
+    let mut indent = 0;
+    for token in device_tree.iter() {
+        match token {
+            device_tree::blob::Token::Begin { name } => {
+                info!("{:|<width$}{}", "", name, width = indent * 2);
+                indent += 1;
+            }
+            device_tree::blob::Token::Prop(prop) => {
+                info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
+            }
+            device_tree::blob::Token::End => indent -= 1,
+        }
+    }
 
     for _ in 0..2 {
         info!("Sleeping for 1s...",);

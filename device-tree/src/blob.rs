@@ -18,6 +18,16 @@ impl<'dtb> Blob<'dtb> {
         Self(dtb)
     }
 
+    /// # Safety
+    ///
+    /// Caller must guarantee `pointer` is a pointer to a valid device tree blob.
+    pub unsafe fn from_ptr(pointer: NonNull<u8>) -> Self {
+        let header = unsafe { pointer.cast::<Header>().as_ref() };
+        assert_eq!(u32::from(header.magic), Header::MAGIC);
+        let len = u32::from(header.total_size) as usize;
+        Self(unsafe { core::slice::from_raw_parts(pointer.as_ptr(), len) })
+    }
+
     pub fn header(&self) -> &'dtb Header<'dtb> {
         unsafe { self.as_ptr().cast::<Header>().as_ref() }
     }
@@ -165,6 +175,10 @@ pub struct Header<'dtb> {
     size_dt_struct: Be32,
 
     _dtb: PhantomData<&'dtb ()>,
+}
+
+impl Header<'_> {
+    const MAGIC: u32 = 0xd00dfeed;
 }
 
 #[derive(Debug)]
