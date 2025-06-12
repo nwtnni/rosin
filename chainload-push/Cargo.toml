@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 serialport = { version = "4.7", default-features = false }
+clap = { version = "4.5", features = ["derive"] }
