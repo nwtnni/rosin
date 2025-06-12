@@ -16,17 +16,18 @@ pub fn main(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64)
     let mut uart = unsafe { uart::Uart::new(0x3F21_5000) };
     uart.init();
 
+    // Synchronize transmitter
     for byte in [0xff; 8] {
         uart.write_byte(byte);
     }
 
-    let mut buffer = [0u8; 8];
+    // Synchronize receiver
     let mut len = 0;
-
     while len < 8 {
         len += (uart.read_byte() == 0xff) as usize;
     }
 
+    let mut buffer = [0u8; 8];
     buffer.iter_mut().for_each(|byte| *byte = uart.read_byte());
 
     let len = u64::from_le_bytes(buffer) as usize;
@@ -41,7 +42,7 @@ pub fn main(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64)
 
     writeln!(
         &mut uart,
-        "[PULL]: copied {} bytes, transferring control...",
+        "[PULL] Received {} bytes, transferring control...",
         len
     )
     .unwrap();
