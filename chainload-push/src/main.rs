@@ -33,7 +33,7 @@ fn main() {
     let eta = Duration::from_secs(len as u64 * 8 / (cli.baud as u64));
     let mut file = BufReader::new(file);
 
-    let port = serialport::new(&cli.port, cli.baud)
+    let mut port = serialport::new(&cli.port, cli.baud)
         .data_bits(DataBits::Eight)
         .stop_bits(StopBits::One)
         .flow_control(FlowControl::None)
@@ -44,59 +44,58 @@ fn main() {
 
     port.clear(ClearBuffer::All).unwrap();
 
+    eprintln!("[PUSH] Synchronizing receiver...");
+    let mut buffer = [0u8; 1];
+    let mut count = 0;
+    while count < 8 {
+        match port.read(&mut buffer).unwrap() {
+            1 if buffer[0] == 0xff => count += 1,
+            _ => (),
+        }
+    }
+
+    eprintln!("[PUSH] Synchronizing transmitter...");
+    port.write_all(&[0xff; 8]).unwrap();
+
+    eprintln!(
+        "[PUSH] Sending {} at {} baud (~{})",
+        Memory(len),
+        cli.baud,
+        Time(eta),
+    );
+
+    port.write_all(&len.to_le_bytes()).unwrap();
+
+    const CHUNK: usize = 512;
+
+    let chunks = len.next_multiple_of(CHUNK) / CHUNK;
+
+    let start = Instant::now();
+    for i in 0..chunks {
+        let now = start.elapsed();
+
+        eprint!(
+            "\r[PUSH] {} / {} | {} / {} | {:.01}%",
+            Memory(i * CHUNK),
+            Memory(len),
+            Time(now),
+            Time(eta),
+            ((i * CHUNK * 100) as f64) / (len as f64),
+        );
+        std::io::copy(&mut file.by_ref().take(CHUNK as u64), &mut port).unwrap();
+
+        if i == chunks - 1 {
+            eprintln!();
+        }
+    }
+
     std::thread::scope(|scope| {
         let mut tx = port.try_clone().unwrap();
         let mut rx = port;
-
-        eprintln!("[PUSH] Synchronizing receiver...");
-        let mut buffer = [0u8; 1];
-        let mut count = 0;
-        while count < 8 {
-            match rx.read(&mut buffer).unwrap() {
-                1 if buffer[0] == 0xff => count += 1,
-                _ => (),
-            }
-        }
-
         scope.spawn(move || {
             let mut stdout = std::io::stdout().lock();
             std::io::copy(&mut rx, &mut stdout).unwrap();
         });
-
-        eprintln!("[PUSH] Synchronizing transmitter...");
-        tx.write_all(&[0xff; 8]).unwrap();
-
-        eprintln!(
-            "[PUSH] Sending {} at {} baud (~{})",
-            Memory(len),
-            cli.baud,
-            Time(eta),
-        );
-
-        tx.write_all(&len.to_le_bytes()).unwrap();
-
-        const CHUNK: usize = 512;
-
-        let chunks = len.next_multiple_of(CHUNK) / CHUNK;
-
-        let start = Instant::now();
-        for i in 0..chunks {
-            let now = start.elapsed();
-
-            eprint!(
-                "\r[PUSH] {} / {} | {} / {} | {:.01}%",
-                Memory(i * CHUNK),
-                Memory(len),
-                Time(now),
-                Time(eta),
-                ((i * CHUNK * 100) as f64) / (len as f64),
-            );
-            std::io::copy(&mut file.by_ref().take(CHUNK as u64), &mut tx).unwrap();
-
-            if i == chunks - 1 {
-                eprintln!();
-            }
-        }
 
         let mut stdin = std::io::stdin().lock();
         std::io::copy(&mut stdin, &mut tx).unwrap();
