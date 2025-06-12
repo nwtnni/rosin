@@ -33,9 +33,9 @@ use tock_registers::interfaces::Writeable as _;
 #[unsafe(no_mangle)]
 pub extern "C" fn _start_hypervisor(
     device_tree: u64,
-    _x1: u64,
-    _x2: u64,
-    _x3: u64,
+    reserved_1: u64,
+    reserved_2: u64,
+    reserved_3: u64,
     stack: u64,
 ) -> ! {
     let level = CurrentEL.read(CurrentEL::EL);
@@ -92,8 +92,14 @@ pub extern "C" fn _start_hypervisor(
 
     unsafe {
         core::arch::asm! {
-            "mov w0, {:w}",
+            "mov x0, {:x}",
+            "mov x1, {:x}",
+            "mov x2, {:x}",
+            "mov x3, {:x}",
             in(reg) device_tree,
+            in(reg) reserved_1,
+            in(reg) reserved_2,
+            in(reg) reserved_3,
         }
     }
 
