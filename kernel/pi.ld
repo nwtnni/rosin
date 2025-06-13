@@ -21,6 +21,7 @@ SECTIONS {
 
     .text : {
         KEEP(*(.text.boot))
+        KEEP(*(.text.start))
         *( .text .text.* )
     } :segment_rx
 

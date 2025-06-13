@@ -5,6 +5,7 @@ members = [
     "chainload-push",
     "device-tree",
     "kernel",
+    "kernel-core",
 ]
 
 [workspace.dependencies]
@@ -12,4 +13,5 @@ aarch64-cpu = "10.0"
 arrayvec = { version = "0.7", default-features = false }
 device-tree.path = "device-tree"
 elf = { version = "0.8", default-features = false }
+kernel-core.path = "kernel-core"
 tock-registers = "0.9"

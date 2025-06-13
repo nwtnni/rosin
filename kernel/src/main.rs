@@ -37,7 +37,7 @@ _start:
 .L_rust:
     ADR_REL x4, __STACK_HI
     mov SP, x4
-    b _start_hypervisor
+    b _start_rust
 .L_loop:
     wfe
     b .L_loop
@@ -49,7 +49,19 @@ _start:
 "
 }
 
+#[unsafe(link_section = ".text.start")]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn _start_rust(
+    device_tree: u64,
+    reserved_1: u64,
+    reserved_2: u64,
+    reserved_3: u64,
+    stack: u64,
+) -> ! {
+    kernel_core::_start_hypervisor(device_tree, reserved_1, reserved_2, reserved_3, stack)
+}
+
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    kernel::handle_panic(info)
+    kernel_core::handle_panic(info)
 }
