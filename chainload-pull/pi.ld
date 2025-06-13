@@ -1,7 +1,8 @@
-__CHAINLOADER_INITIAL_LO = 0x8 << 16;
-__CHAINLOADER_FINAL_LO = 1 << 25;
+__TEXT = 0x8 << 16;
+__TEXT_LO = 1 << 28;
+__ELF = 1 << 29;
 
-ENTRY(__CHAINLOADER_INITIAL_LO)
+ENTRY(__TEXT)
 
 PHDRS {
     segment_ro PT_LOAD FLAGS(4);
@@ -10,13 +11,13 @@ PHDRS {
 }
 
 SECTIONS {
-    . = __CHAINLOADER_FINAL_LO - __CHAINLOADER_INITIAL_LO;
+    . = __TEXT_LO - __TEXT;
 
     __STACK_LO = .;
-    . += __CHAINLOADER_INITIAL_LO;
+    . += __TEXT;
     __STACK_HI = .;
 
-    .text : AT(__CHAINLOADER_INITIAL_LO) {
+    .text : AT(__TEXT_LO) {
         KEEP(*(.text.boot))
         KEEP(*(.text.start))
         *( .text .text.* )
@@ -46,5 +47,5 @@ SECTIONS {
     }
 
     . = ALIGN(16);
-    __CHAINLOADER_FINAL_HI = .;
+    __TEXT_HI = .;
 }

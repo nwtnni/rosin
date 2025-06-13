@@ -14,11 +14,10 @@ _start:
     mrs x4, MPIDR_EL1
     and x4, x4, 0b11
     cmp x4, xzr
-    b.ne .L_loop
-.L_relocate:
-    ldr x4, =__CHAINLOADER_INITIAL_LO
-    ldr x5, =__CHAINLOADER_FINAL_LO
-    ldr x6, =__CHAINLOADER_FINAL_HI
+    b.ne .L_hang
+    ldr x4, =__TEXT
+    ldr x5, =__TEXT_LO
+    ldr x6, =__TEXT_HI
 .L_copy:
     ldp x7, x8, [x4], 16
     stp x7, x8, [x5], 16
@@ -29,9 +28,9 @@ _start:
     mov sp, x4
     ldr x4, =_start_rust
     br x4
-.L_loop:
+.L_hang:
     wfe
-    b .L_loop
+    b .L_hang
 
 .size _start, . - _start
 .type _start, %function

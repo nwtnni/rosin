@@ -4,11 +4,14 @@ use core::ffi;
 use core::fmt::Write as _;
 use core::mem;
 
+use elf::endian::AnyEndian;
+
 mod gpio;
 mod uart;
 
 unsafe extern "C" {
-    static __CHAINLOADER_INITIAL_LO: ffi::c_void;
+    static __TEXT: ffi::c_void;
+    static __ELF: ffi::c_void;
 }
 
 pub fn main(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64) -> ! {
@@ -31,7 +34,7 @@ pub fn main(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64)
     buffer.iter_mut().for_each(|byte| *byte = uart.read_byte());
 
     let len = u64::from_le_bytes(buffer) as usize;
-    let base = unsafe { &__CHAINLOADER_INITIAL_LO as *const ffi::c_void as *const u8 as *mut u8 };
+    let base = unsafe { &__ELF as *const ffi::c_void as *const u8 as *mut u8 };
 
     for i in 0..len {
         let byte = uart.read_byte();
@@ -40,12 +43,11 @@ pub fn main(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64)
         }
     }
 
-    writeln!(
-        &mut uart,
-        "[PULL] Received {} bytes, transferring control...",
-        len
-    )
-    .unwrap();
+    writeln!(&mut uart, "[PULL] Received ELF file ({}B)", len).unwrap();
+
+    let slice = unsafe { core::slice::from_raw_parts(base, len) };
+
+    let elf = elf::ElfBytes::<AnyEndian>::minimal_parse(slice).unwrap();
 
     uart.flush();
 
