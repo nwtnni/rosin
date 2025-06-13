@@ -8,7 +8,7 @@ use aarch64_cpu::registers::ReadWriteable as _;
 use aarch64_cpu::registers::VBAR_EL1;
 use tock_registers::interfaces::Writeable as _;
 
-use crate::dev::bcm2837b0;
+use crate::device::bcm2837b0;
 use crate::time;
 
 global_asm! {

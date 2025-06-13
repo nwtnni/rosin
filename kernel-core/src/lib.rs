@@ -3,7 +3,7 @@
 #[macro_use]
 pub mod print;
 
-pub mod dev;
+pub mod device;
 pub mod irq;
 pub mod mmu;
 mod sync;
@@ -159,7 +159,7 @@ pub fn _start_kernel(device_tree: u64) -> ! {
     println!("Echo:");
     let mut buffer = [0u8];
     loop {
-        unsafe { dev::bcm2837b0::mini::Uart::new(0x3F21_5000) }
+        unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) }
             .read(&mut buffer)
             .unwrap();
 
@@ -189,7 +189,7 @@ pub fn spin() -> ! {
 pub fn _print(args: core::fmt::Arguments) {
     // UART.lock().write_fmt(args).unwrap();
     // UART_MINI.lock().write_fmt(args).unwrap();
-    unsafe { dev::bcm2837b0::mini::Uart::new(0x3F21_5000) }
+    unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) }
         .write_fmt(args)
         .unwrap();
 }
@@ -210,11 +210,11 @@ pub fn init() {
     // }
 }
 
-pub static UART: SpinLock<dev::bcm2837b0::uart::Uart> =
-    SpinLock::new(unsafe { dev::bcm2837b0::uart::Uart::new(0x3F20_1000) });
+pub static UART: SpinLock<device::bcm2837b0::uart::Uart> =
+    SpinLock::new(unsafe { device::bcm2837b0::uart::Uart::new(0x3F20_1000) });
 
-pub static UART_MINI: SpinLock<dev::bcm2837b0::mini::Uart> =
-    SpinLock::new(unsafe { dev::bcm2837b0::mini::Uart::new(0x3F21_5000) });
+pub static UART_MINI: SpinLock<device::bcm2837b0::mini::Uart> =
+    SpinLock::new(unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) });
 
 pub type Result<T> = core::result::Result<T, Error>;
 

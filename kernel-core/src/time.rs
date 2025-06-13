@@ -6,7 +6,7 @@ use aarch64_cpu::registers::CNTFRQ_EL0;
 use aarch64_cpu::registers::CNTPCT_EL0;
 use tock_registers::interfaces::Readable as _;
 
-use crate::dev::bcm2837b0;
+use crate::device::bcm2837b0;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct Instant(Cycle);
