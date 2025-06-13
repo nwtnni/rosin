@@ -6,4 +6,5 @@ edition = "2024"
 [dependencies]
 aarch64-cpu.workspace = true
 elf.workspace = true
+kernel-core.workspace = true
 tock-registers.workspace = true

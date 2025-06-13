@@ -157,19 +157,9 @@ pub fn _start_kernel(device_tree: u64) -> ! {
     }
 
     println!("Echo:");
-    let mut buffer = [0u8];
     loop {
-        unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) }
-            .read(&mut buffer)
-            .unwrap();
-
-        print!(
-            "{}",
-            match buffer[0] {
-                b'\r' => '\n',
-                byte => byte as char,
-            }
-        );
+        let byte = unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) }.read_byte();
+        print!("{}", byte as char);
     }
 }
 

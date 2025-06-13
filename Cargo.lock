@@ -91,6 +91,7 @@ version = "0.1.0"
 dependencies = [
  "aarch64-cpu",
  "elf",
+ "kernel-core",
  "tock-registers",
 ]
 
