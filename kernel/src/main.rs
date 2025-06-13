@@ -2,6 +2,16 @@
 #![no_main]
 
 use core::panic::PanicInfo;
+use core::ptr::NonNull;
+use core::time::Duration;
+
+use aarch64_cpu::registers::CurrentEL;
+use kernel_core::device;
+use kernel_core::info;
+use kernel_core::print;
+use kernel_core::println;
+use kernel_core::time;
+use tock_registers::interfaces::Readable as _;
 
 // Avoid clobbering DTB and next three reserved arguments
 // - https://github.com/raspberrypi/tools/blob/439b6198a9b340de5998dd14a26a0d9d38a6bcac/armstubs/armstub8.S#L163-L171
@@ -25,22 +35,22 @@ _start:
     mrs x4, MPIDR_EL1
     and x4, x4, 0b11
     cmp x4, xzr
-    b.ne .L_loop
+    b.ne .L_spin
 
     ADR_REL x4, __BSS_LO
     ADR_REL x5, __BSS_HI
 .L_bss:
     cmp x4, x5
-    b.eq .L_rust
+    b.eq .L_start
     stp xzr, xzr, [x4], 16
     b .L_bss
-.L_rust:
+.L_start:
     ADR_REL x4, __STACK_HI
     mov SP, x4
-    b _start_rust
-.L_loop:
+    b _start_kernel
+.L_spin:
     wfe
-    b .L_loop
+    b .L_spin
 
 .size _start, . - _start
 .type _start, %function
@@ -51,14 +61,65 @@ _start:
 
 #[unsafe(link_section = ".text.start")]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn _start_rust(
+unsafe extern "C" fn _start_kernel(
     device_tree: u64,
-    reserved_1: u64,
-    reserved_2: u64,
-    reserved_3: u64,
-    stack: u64,
+    _reserved_1: u64,
+    _reserved_2: u64,
+    _reserved_3: u64,
 ) -> ! {
-    kernel_core::_start_hypervisor(device_tree, reserved_1, reserved_2, reserved_3, stack)
+    kernel_core::init();
+
+    info!(
+        "Hello, world! EL: {}, DTB: {:#x}",
+        CurrentEL.read(CurrentEL::EL),
+        device_tree,
+    );
+
+    info!(
+        "Resolution: {}ns, frequency: {}hz",
+        Duration::from(time::Cycle::ONE).as_nanos(),
+        time::frequency(),
+    );
+
+    // kernel::info!(
+    //     "Interrupt in 1 second... EL: {}",
+    //     CurrentEL.read(CurrentEL::EL)
+    // );
+    //
+    // kernel::irq::enable();
+    // kernel::irq::enable_timer(Duration::from_secs(1));
+
+    // let device_tree = &dev::bcm2837b0::DTB;
+
+    let device_tree =
+        unsafe { device_tree::Blob::from_ptr(NonNull::new(device_tree as *mut u8).unwrap()) };
+
+    info!("Device tree header: {:#x?}", device_tree.header());
+
+    let mut indent = 0;
+    for token in device_tree.iter() {
+        match token {
+            device_tree::blob::Token::Begin { name } => {
+                info!("{:|<width$}{}", "", name, width = indent * 2);
+                indent += 1;
+            }
+            device_tree::blob::Token::Prop(prop) => {
+                info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
+            }
+            device_tree::blob::Token::End => indent -= 1,
+        }
+    }
+
+    for _ in 0..2 {
+        info!("Sleeping for 1s...",);
+        time::spin(Duration::from_secs(1));
+    }
+
+    println!("Echo:");
+    loop {
+        let byte = unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) }.read_byte();
+        print!("{}", byte as char);
+    }
 }
 
 #[panic_handler]

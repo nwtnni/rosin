@@ -5,4 +5,7 @@ authors = ["Newton Ni <nwtnni@gmail.com>"]
 edition = "2024"
 
 [dependencies]
+aarch64-cpu.workspace = true
+device-tree.workspace = true
 kernel-core.workspace = true
+tock-registers.workspace = true
