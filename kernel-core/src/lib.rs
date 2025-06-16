@@ -5,6 +5,7 @@ pub mod print;
 
 pub mod device;
 pub mod irq;
+pub mod mem;
 pub mod mmu;
 mod sync;
 pub mod time;
