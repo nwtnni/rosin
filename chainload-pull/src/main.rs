@@ -23,6 +23,13 @@ use kernel_core::mem::Virt;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
 
+// Avoid clobbering DTB and next three reserved arguments
+// - https://github.com/raspberrypi/tools/blob/439b6198a9b340de5998dd14a26a0d9d38a6bcac/armstubs/armstub8.S#L163-L171
+//
+// https://devblogs.microsoft.com/oldnewthing/20220726-00/?p=106898
+// https://dinfuehr.github.io/blog/encoding-of-immediate-values-on-aarch64/
+// https://developer.arm.com/documentation/dui0774/i/armclang-Integrated-Assembler-Directives
+// https://stackoverflow.com/questions/38570495/aarch64-relocation-prefixes/38608738#38608738
 core::arch::global_asm! {
 r"
 .pushsection .text.boot
@@ -71,9 +78,9 @@ unsafe extern "C" {
 #[unsafe(no_mangle)]
 pub extern "C" fn _start_hypervisor(
     device_tree: u64,
-    reserved_1: u64,
-    reserved_2: u64,
-    reserved_3: u64,
+    _reserved_1: u64,
+    _reserved_2: u64,
+    _reserved_3: u64,
     stack: u64,
 ) -> ! {
     let level = CurrentEL.read(CurrentEL::EL);
@@ -123,30 +130,24 @@ pub extern "C" fn _start_hypervisor(
                     + SPSR_EL2::M::EL1h,
             );
         }
-        1 => _start_kernel(device_tree, reserved_1, reserved_2, reserved_3),
+        1 => _start_kernel(device_tree),
         level => unreachable!("Unexpected exception level: {}", level),
     }
-
-    SP_EL1.set(stack);
 
     unsafe {
         core::arch::asm! {
             "mov x0, {:x}",
-            "mov x1, {:x}",
-            "mov x2, {:x}",
-            "mov x3, {:x}",
+            "msr SP_EL1, {:x}",
+            "eret",
+            in(reg) stack,
             in(reg) device_tree,
-            in(reg) reserved_1,
-            in(reg) reserved_2,
-            in(reg) reserved_3,
+            options(noreturn, nomem)
         }
     }
-
-    asm::eret()
 }
 
 #[unsafe(no_mangle)]
-fn _start_kernel(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3: u64) -> ! {
+fn _start_kernel(device_tree: u64) -> ! {
     unsafe { gpio::Gpio::new(0x3F20_0000).init() }
     let mut uart = unsafe { mini::Uart::new(0x3F21_5000) };
     uart.init();
@@ -310,13 +311,9 @@ fn _start_kernel(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3:
         core::arch::asm! {
             "mov x0, {arg_0:x}",
             "mov x1, {arg_1:x}",
-            "mov x2, {arg_2:x}",
-            "mov x3, {arg_3:x}",
             "br {entry:x}",
             arg_0 = in(reg) device_tree,
-            arg_1 = in(reg) reserved_1,
-            arg_2 = in(reg) reserved_2,
-            arg_3 = in(reg) reserved_3,
+            arg_1 = in(reg) page_table_hi as *mut _ as u64 + offset,
             entry = in(reg) elf.ehdr.e_entry - offset,
             options(nomem, noreturn)
         }

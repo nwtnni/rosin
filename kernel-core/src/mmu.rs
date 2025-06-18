@@ -1,4 +1,3 @@
-use core::fmt::Write as _;
 use core::marker::PhantomData;
 use core::ops::Deref;
 use core::ops::DerefMut;
@@ -69,7 +68,26 @@ impl<S: crate::mem::AddressSpace> PageTable<S> {
 
         match offset {
             0 => TTBR0_EL1.set_baddr(self.l2.as_ptr() as u64),
-            _ => TTBR1_EL1.set_baddr(self.l2.as_ptr() as u64),
+            _ => {
+                for (virt, phys) in (self as *mut _ as u64..)
+                    .step_by(1 << 16)
+                    .take(self.l3.len() + 1)
+                    .map(|phys| (phys + offset, phys))
+                    .map(|(virt, phys)| (crate::mem::Virt::new(virt), crate::mem::Phys::new(phys)))
+                {
+                    self.map(
+                        virt,
+                        phys,
+                        Attr::Normal {
+                            read: true,
+                            write: true,
+                            execute: false,
+                        },
+                    );
+                }
+
+                TTBR1_EL1.set_baddr(self.l2.as_ptr() as u64);
+            }
         }
     }
 

@@ -5,36 +5,17 @@ use core::panic::PanicInfo;
 use core::ptr::NonNull;
 use core::time::Duration;
 
-use aarch64_cpu::registers::CurrentEL;
 use kernel_core::device;
 use kernel_core::info;
 use kernel_core::print;
 use kernel_core::println;
 use kernel_core::time;
-use tock_registers::interfaces::Readable as _;
 
-// Avoid clobbering DTB and next three reserved arguments
-// - https://github.com/raspberrypi/tools/blob/439b6198a9b340de5998dd14a26a0d9d38a6bcac/armstubs/armstub8.S#L163-L171
-//
-// https://devblogs.microsoft.com/oldnewthing/20220726-00/?p=106898
-// https://dinfuehr.github.io/blog/encoding-of-immediate-values-on-aarch64/
-// https://developer.arm.com/documentation/dui0774/i/armclang-Integrated-Assembler-Directives
-// https://stackoverflow.com/questions/38570495/aarch64-relocation-prefixes/38608738#38608738
 core::arch::global_asm! {
 r"
 .pushsection .text.boot
 
-# Explicit :pg_hi21: doesn't seem to be supported
-# https://reviews.llvm.org/D64455
-.macro ADR_REL register, symbol
-    adrp \register, \symbol
-    add \register, \register, :lo12:\symbol
-.endmacro
-
 _start:
-    ldr x4, =__VECTOR_TABLE
-    msr VBAR_EL1, x4
-
     mrs x4, SCTLR_EL1
 
     # M: MMU enable
@@ -66,17 +47,13 @@ _start:
 #[unsafe(no_mangle)]
 unsafe extern "C" fn _start_kernel(
     device_tree: u64,
-    _reserved_1: u64,
-    _reserved_2: u64,
-    _reserved_3: u64,
+    page_table: *mut kernel_core::mmu::PageTable<kernel_core::mem::Kernel>,
 ) -> ! {
     kernel_core::init();
 
-    info!(
-        "Hello, world! EL: {}, DTB: {:#x}",
-        CurrentEL.read(CurrentEL::EL),
-        device_tree,
-    );
+    info!("Hello, world!");
+
+    info!("Page table: {:#x?}", page_table);
 
     info!(
         "Resolution: {}ns, frequency: {}hz",
