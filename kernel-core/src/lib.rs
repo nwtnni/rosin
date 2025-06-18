@@ -9,7 +9,7 @@ pub mod mem;
 pub mod mmu;
 mod sync;
 pub mod time;
-mod unit;
+pub mod unit;
 
 use core::fmt::Debug;
 use core::fmt::Write;
@@ -51,7 +51,9 @@ pub fn init() {
     // unsafe {
     //     // bcm2837b0::clock::Clock::new(0x4000_0000).init();
     //
-    //     irq::init();
+    unsafe {
+        irq::init();
+    }
     // }
 }
 

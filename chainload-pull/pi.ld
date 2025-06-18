@@ -17,7 +17,7 @@ SECTIONS {
     . += __TEXT;
     __STACK_HI = .;
 
-    .text : AT(__TEXT_LO) {
+    .text : AT(__TEXT) {
         KEEP(*(.text.boot))
         KEEP(*(.text.start))
         *( .text .text.* )

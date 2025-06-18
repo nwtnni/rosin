@@ -18,6 +18,8 @@ use aarch64_cpu::registers::SPSR_EL3;
 use elf::endian::AnyEndian;
 use kernel_core::device::bcm2837b0::gpio;
 use kernel_core::device::bcm2837b0::mini;
+use kernel_core::mem::Phys;
+use kernel_core::mem::Virt;
 use tock_registers::interfaces::Readable as _;
 use tock_registers::interfaces::Writeable as _;
 
@@ -94,7 +96,8 @@ pub extern "C" fn _start_hypervisor(
                 + HCR_EL2::IMO::DisableVirtualIRQ
                 + HCR_EL2::FMO::DisableVirtualFIQ
                 + HCR_EL2::TGE::DisableTrapGeneralExceptionsToEl2
-                + HCR_EL2::E2H::DisableOsAtEl2,
+                + HCR_EL2::E2H::DisableOsAtEl2
+                + HCR_EL2::VM::Disable,
         );
     }
 
@@ -148,15 +151,18 @@ fn _start_kernel(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3:
     let mut uart = unsafe { mini::Uart::new(0x3F21_5000) };
     uart.init();
 
-    // Synchronize transmitter
-    for byte in [0xff; 8] {
-        uart.write_byte(byte);
-    }
-
     // Synchronize receiver
     let mut len = 0;
     while len < 8 {
-        len += (uart.read_byte() == 0xff) as usize;
+        match uart.read_byte() {
+            0xff => len += 1,
+            _ => len = 0,
+        }
+    }
+
+    // Synchronize transmitter
+    for byte in [0xff; 8] {
+        uart.write_byte(byte);
     }
 
     let mut buffer = [0u8; 8];
@@ -172,23 +178,162 @@ fn _start_kernel(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3:
         }
     }
 
-    writeln!(&mut uart, "[PULL] Received ELF file ({}B)", len).unwrap();
+    writeln!(
+        &mut uart,
+        "[PULL] Copied kernel to {:#x?} ({:?})",
+        base,
+        kernel_core::unit::Byte::new(len)
+    )
+    .unwrap();
 
     let slice = unsafe { core::slice::from_raw_parts(base, len) };
 
     let elf = elf::ElfBytes::<AnyEndian>::minimal_parse(slice).unwrap();
+    let segments = elf.segments().unwrap();
+
+    let heap = segments
+        .iter()
+        .filter(|segment| segment.p_type == elf::abi::PT_LOAD)
+        .map(|segment| segment.p_paddr + segment.p_memsz)
+        .map(|address| address.next_multiple_of(1 << 16))
+        .max()
+        .unwrap();
+
+    let offset = segments
+        .iter()
+        .find(|segment| segment.p_type == elf::abi::PT_LOAD)
+        .map(|segment| segment.p_vaddr - segment.p_paddr)
+        .unwrap();
+
+    let page_table_hi = unsafe {
+        (heap as *mut kernel_core::mmu::PageTable<kernel_core::mem::Kernel>)
+            .as_mut()
+            .unwrap()
+    };
+
+    let page_table_lo = unsafe {
+        (heap as *mut kernel_core::mmu::PageTable<kernel_core::mem::User>)
+            .byte_add(
+                mem::size_of::<kernel_core::mmu::PageTable<kernel_core::mem::Kernel>>()
+                    .next_multiple_of(1 << 16),
+            )
+            .as_mut()
+            .unwrap()
+    };
+
+    kernel_core::mmu::init();
+
+    writeln!(
+        &mut uart,
+        "[PULL] Initializing page tables at {:#x?} for kernel (offset {:#x}) and {:#x?} for identity",
+        page_table_hi as *mut _, offset, page_table_lo as *mut _
+    )
+    .unwrap();
+
+    // page_table_hi.init(offset);
+    page_table_lo.init(0);
+
+    for segment in segments {
+        if segment.p_type != elf::abi::PT_LOAD {
+            continue;
+        }
+
+        let read = segment.p_flags & elf::abi::PF_R > 0;
+        let write = segment.p_flags & elf::abi::PF_W > 0;
+        let execute = segment.p_flags & elf::abi::PF_X > 0;
+        let data = elf.segment_data(&segment).unwrap().as_ptr();
+
+        writeln!(
+            &mut uart,
+            "[PULL] Copying {:?} to {:?} ({}{}{}, {:#x} file / {:#x} mem)",
+            data as *mut u8,
+            segment.p_paddr as *mut u8,
+            if read { "R" } else { "" },
+            if write { "W" } else { "" },
+            if execute { "X" } else { "" },
+            kernel_core::unit::Byte::new(segment.p_filesz as usize),
+            kernel_core::unit::Byte::new(segment.p_memsz as usize),
+        )
+        .unwrap();
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                data,
+                segment.p_paddr as *mut u8,
+                segment.p_filesz as usize,
+            );
+
+            core::ptr::write_bytes(
+                (segment.p_paddr as *mut u8).byte_add(segment.p_filesz as usize),
+                0,
+                (segment.p_memsz - segment.p_filesz) as usize,
+            )
+        }
+
+        for offset in (0..segment.p_memsz.next_multiple_of(1 << 16)).step_by(1 << 16) {
+            let virt_hi = Virt::<kernel_core::mem::Kernel>::new(segment.p_vaddr + offset);
+            let virt_lo = Virt::<kernel_core::mem::User>::new(segment.p_paddr + offset);
+            let phys = Phys::new(segment.p_paddr + offset);
+
+            // page_table_hi.map(
+            //     virt_hi,
+            //     phys,
+            //     kernel_core::mmu::Attr::Normal {
+            //         read,
+            //         write,
+            //         execute,
+            //     },
+            // );
+
+            page_table_lo.map(
+                virt_lo,
+                phys,
+                kernel_core::mmu::Attr::Normal {
+                    read,
+                    write,
+                    execute,
+                },
+            );
+        }
+    }
+
+    writeln!(
+        &mut uart,
+        "[PULL] Jumping to entry {:#x}",
+        elf.ehdr.e_entry - offset,
+    )
+    .unwrap();
 
     uart.flush();
 
-    (unsafe { mem::transmute::<*mut u8, fn(u64, u64, u64, u64) -> !>(base) })(
-        device_tree,
-        reserved_1,
-        reserved_2,
-        reserved_3,
-    )
+    unsafe {
+        core::arch::asm! {
+            "mov x0, {arg_0:x}",
+            "mov x1, {arg_1:x}",
+            "mov x2, {arg_2:x}",
+            "mov x3, {arg_3:x}",
+            "br {entry:x}",
+            arg_0 = in(reg) device_tree,
+            arg_1 = in(reg) reserved_1,
+            arg_2 = in(reg) reserved_2,
+            arg_3 = in(reg) reserved_3,
+            entry = in(reg) elf.ehdr.e_entry - offset,
+            options(nomem, noreturn)
+        }
+    }
 }
 
 #[panic_handler]
-fn handle_panic(_info: &core::panic::PanicInfo) -> ! {
-    loop {}
+fn handle_panic(info: &core::panic::PanicInfo) -> ! {
+    writeln!(
+        &mut kernel_core::Console,
+        "[PANIC][{}] {}",
+        info.location().unwrap(),
+        info.message()
+    )
+    .unwrap();
+
+    loop {
+        aarch64_cpu::asm::wfe();
+    }
 }

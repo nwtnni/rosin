@@ -32,25 +32,28 @@ r"
 .endmacro
 
 _start:
-    mrs x4, MPIDR_EL1
-    and x4, x4, 0b11
-    cmp x4, xzr
-    b.ne .L_spin
+    ldr x4, =__VECTOR_TABLE
+    msr VBAR_EL1, x4
 
-    ADR_REL x4, __BSS_LO
-    ADR_REL x5, __BSS_HI
-.L_bss:
-    cmp x4, x5
-    b.eq .L_start
-    stp xzr, xzr, [x4], 16
-    b .L_bss
-.L_start:
-    ADR_REL x4, __STACK_HI
-    mov SP, x4
-    b _start_kernel
-.L_spin:
-    wfe
-    b .L_spin
+    mrs x4, SCTLR_EL1
+
+    # M: MMU enable
+    orr x4, x4, (1 << 0)
+    # C: Cacheability for data accesses
+    orr x4, x4, (1 << 2)
+    # I: Cacheability for instruction accesses
+    orr x4, x4, (1 << 12)
+    # WXN: Disable write XOR execute
+    and x4, x4, ~(1 << 19)
+
+    isb sy
+    msr SCTLR_EL1, x4
+    isb sy
+
+    ldr x4, =__STACK_HI
+    mov sp, x4
+    ldr x4, =_start_kernel
+    br x4
 
 .size _start, . - _start
 .type _start, %function

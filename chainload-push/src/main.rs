@@ -44,18 +44,18 @@ fn main() {
 
     port.clear(ClearBuffer::All).unwrap();
 
+    eprintln!("[PUSH] Synchronizing transmitter...");
+    port.write_all(&[0xff; 8]).unwrap();
+
     eprintln!("[PUSH] Synchronizing receiver...");
     let mut buffer = [0u8; 1];
     let mut count = 0;
     while count < 8 {
         match port.read(&mut buffer).unwrap() {
             1 if buffer[0] == 0xff => count += 1,
-            _ => (),
+            _ => count = 0,
         }
     }
-
-    eprintln!("[PUSH] Synchronizing transmitter...");
-    port.write_all(&[0xff; 8]).unwrap();
 
     eprintln!(
         "[PUSH] Sending {} at {} baud (~{})",

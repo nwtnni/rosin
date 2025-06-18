@@ -1,11 +1,30 @@
+use crate::mem::Phys;
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Id(u64);
+
+impl From<Id> for u64 {
+    fn from(Id(id): Id) -> Self {
+        id
+    }
+}
+
+impl From<Phys> for Id {
+    fn from(phys: Phys) -> Self {
+        Self(u64::from(phys) >> 16)
+    }
+}
 
 pub struct Allocator([u64; 256]);
 
 impl Allocator {
     pub const fn new() -> Self {
         Self([0; 256])
+    }
+
+    pub fn reserve(&mut self, id: Id) {
+        let (i, j) = Self::id_to_index(id);
+        self.0[i] |= 1 << j;
     }
 
     pub fn allocate(&mut self) -> Option<Id> {
@@ -18,21 +37,21 @@ impl Allocator {
                     j => Some((i, j)),
                 })?;
 
-        self.0[i] |= 1 << j;
-        Some(Id(i as u64 * 64 + j as u64))
+        let id = Id(i as u64 * 64 + j as u64);
+        self.reserve(id);
+        Some(id)
     }
 
     pub fn deallocate(&mut self, id: Id) {
-        let i = id.0 / 64;
-        let j = id.0 % 64;
+        let (i, j) = Self::id_to_index(id);
 
-        assert!(
-            self.0[i as usize] & (1 << j) > 0,
-            "Double free at page {:?}",
-            id,
-        );
+        assert!(self.0[i] & (1 << j) > 0, "Double free at page {:?}", id,);
 
-        self.0[i as usize] &= !(1 << j);
+        self.0[i] &= !(1 << j);
+    }
+
+    fn id_to_index(id: Id) -> (usize, u64) {
+        ((id.0 / 64) as usize, id.0 % 64)
     }
 }
 
