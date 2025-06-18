@@ -1,7 +1,6 @@
 /* https://forums.raspberrypi.com/viewtopic.php?t=328000 */
 __KERNEL_PHYS = 0x8 << 16;
-/* __KERNEL_OFFSET = 0xFFFFFFFF << 32; */
-__KERNEL_OFFSET = 0;
+__KERNEL_OFFSET = 0xFFFFFFFF << 32;
 __KERNEL_VIRT = __KERNEL_PHYS + __KERNEL_OFFSET;
 
 ENTRY(__KERNEL_VIRT)

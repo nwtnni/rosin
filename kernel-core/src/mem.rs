@@ -74,8 +74,7 @@ pub trait AddressSpace: seal::Seal + Copy + Clone + core::fmt::Debug {
 
 impl AddressSpace for Kernel {
     fn validate(address: u64) -> bool {
-        // address >= OFFSET
-        true
+        address >= OFFSET
     }
 }
 

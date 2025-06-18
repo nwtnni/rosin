@@ -230,7 +230,7 @@ fn _start_kernel(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3:
     )
     .unwrap();
 
-    // page_table_hi.init(offset);
+    page_table_hi.init(offset);
     page_table_lo.init(0);
 
     for segment in segments {
@@ -275,15 +275,15 @@ fn _start_kernel(device_tree: u64, reserved_1: u64, reserved_2: u64, reserved_3:
             let virt_lo = Virt::<kernel_core::mem::User>::new(segment.p_paddr + offset);
             let phys = Phys::new(segment.p_paddr + offset);
 
-            // page_table_hi.map(
-            //     virt_hi,
-            //     phys,
-            //     kernel_core::mmu::Attr::Normal {
-            //         read,
-            //         write,
-            //         execute,
-            //     },
-            // );
+            page_table_hi.map(
+                virt_hi,
+                phys,
+                kernel_core::mmu::Attr::Normal {
+                    read,
+                    write,
+                    execute,
+                },
+            );
 
             page_table_lo.map(
                 virt_lo,

@@ -58,60 +58,22 @@ impl<S: crate::mem::AddressSpace> PageTable<S> {
             )
         }
 
-        for (virt, phys) in (0..)
+        // FIXME: set up device MMIO in kernel
+        for (virt, phys) in (0x3F00_0000..0x4001_0000)
             .step_by(1 << 16)
-            .take(self.l3.len() * self.l3[0].len() / 2)
             .map(|phys| (phys + offset, phys))
             .map(|(virt, phys)| (crate::mem::Virt::new(virt), crate::mem::Phys::new(phys)))
         {
-            self.map(
-                virt,
-                phys,
-                if u64::from(phys) >= 0x3F00_0000 && u64::from(phys) < 0x4001_0000 {
-                    Attr::Device
-                } else {
-                    continue;
-                    // Attr::Normal {
-                    //     read: true,
-                    //     write: true,
-                    //     execute: true,
-                    // }
-                },
-            );
-        }
-
-        for address in [self.l2.as_ptr() as u64, self.l3.as_ptr() as u64] {
-            self.map(
-                crate::mem::Virt::new(address + offset),
-                crate::mem::Phys::new(address),
-                Attr::Normal {
-                    read: true,
-                    write: true,
-                    execute: false,
-                },
-            );
+            self.map(virt, phys, Attr::Device);
         }
 
         match offset {
             0 => TTBR0_EL1.set_baddr(self.l2.as_ptr() as u64),
             _ => TTBR1_EL1.set_baddr(self.l2.as_ptr() as u64),
         }
-        writeln!(
-            &mut unsafe { crate::device::bcm2837b0::mini::Uart::new(0x3f21_5000) },
-            "ttbr is {:#x?}",
-            self.l2.as_ptr()
-        );
     }
 
     pub fn map(&mut self, virt: crate::mem::Virt<S>, phys: crate::mem::Phys, attr: Attr) {
-        writeln!(
-            &mut unsafe { crate::device::bcm2837b0::mini::Uart::new(0x3f21_5000) },
-            "map {:#x?} to {:#x?} as {:?}",
-            virt,
-            phys,
-            attr
-        );
-
         let index_l2 = u64::from(virt) >> 29 & ((1 << 3) - 1);
         let index_l3 = (u64::from(virt) >> 16) & ((1 << 13) - 1);
 
