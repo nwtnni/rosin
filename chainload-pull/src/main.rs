@@ -4,15 +4,14 @@
 use core::ffi;
 use core::fmt::Write as _;
 use core::mem;
+use core::ptr::NonNull;
 
-use aarch64_cpu::asm;
 use aarch64_cpu::registers::CNTHCTL_EL2;
 use aarch64_cpu::registers::CurrentEL;
 use aarch64_cpu::registers::ELR_EL2;
 use aarch64_cpu::registers::ELR_EL3;
 use aarch64_cpu::registers::HCR_EL2;
 use aarch64_cpu::registers::SCR_EL3;
-use aarch64_cpu::registers::SP_EL1;
 use aarch64_cpu::registers::SPSR_EL2;
 use aarch64_cpu::registers::SPSR_EL3;
 use elf::endian::AnyEndian;
@@ -69,21 +68,19 @@ _start:
 ",
 }
 
-unsafe extern "C" {
-    static __TEXT: ffi::c_void;
-    static __ELF: ffi::c_void;
-}
-
 #[unsafe(link_section = ".text.start")]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start_hypervisor(
-    device_tree: u64,
+    _device_tree: u64,
     _reserved_1: u64,
     _reserved_2: u64,
     _reserved_3: u64,
     stack: u64,
 ) -> ! {
     let level = CurrentEL.read(CurrentEL::EL);
+
+    #[cfg(feature = "qemu")]
+    let _device_tree = include_bytes!("bcm2710-rpi-3-b-plus.dtb").as_ptr() as u64;
 
     if level >= 3 {
         SCR_EL3.write(
@@ -130,7 +127,7 @@ pub extern "C" fn _start_hypervisor(
                     + SPSR_EL2::M::EL1h,
             );
         }
-        1 => _start_kernel(device_tree),
+        1 => _start_kernel(_device_tree),
         level => unreachable!("Unexpected exception level: {}", level),
     }
 
@@ -139,8 +136,8 @@ pub extern "C" fn _start_hypervisor(
             "mov x0, {:x}",
             "msr SP_EL1, {:x}",
             "eret",
+            in(reg) _device_tree,
             in(reg) stack,
-            in(reg) device_tree,
             options(noreturn, nomem)
         }
     }
@@ -170,7 +167,7 @@ fn _start_kernel(device_tree: u64) -> ! {
     buffer.iter_mut().for_each(|byte| *byte = uart.read_byte());
 
     let len = u64::from_le_bytes(buffer) as usize;
-    let base = unsafe { &__ELF as *const ffi::c_void as *const u8 as *mut u8 };
+    let base = (1 << 29) as *mut u8;
 
     for i in 0..len {
         let byte = uart.read_byte();
@@ -181,9 +178,9 @@ fn _start_kernel(device_tree: u64) -> ! {
 
     writeln!(
         &mut uart,
-        "[PULL] Copied kernel to {:#x?} ({:?})",
+        "[PULL] Wrote ELF file ({:#x?}) at {:#x?}",
+        kernel_core::unit::Byte::new(len),
         base,
-        kernel_core::unit::Byte::new(len)
     )
     .unwrap();
 
@@ -206,18 +203,40 @@ fn _start_kernel(device_tree: u64) -> ! {
         .map(|segment| segment.p_vaddr - segment.p_paddr)
         .unwrap();
 
-    let page_table_hi = unsafe {
+    let page_table_kernel = unsafe {
         (heap as *mut kernel_core::mmu::PageTable<kernel_core::mem::Kernel>)
             .as_mut()
             .unwrap()
     };
 
-    let page_table_lo = unsafe {
-        (heap as *mut kernel_core::mmu::PageTable<kernel_core::mem::User>)
-            .byte_add(
-                mem::size_of::<kernel_core::mmu::PageTable<kernel_core::mem::Kernel>>()
-                    .next_multiple_of(1 << 16),
-            )
+    let device_tree_len =
+        unsafe { device_tree::Blob::from_ptr(NonNull::new(device_tree as *mut u8).unwrap()) }
+            .header()
+            .len();
+    let device_tree_src = device_tree;
+    let device_tree_dst =
+        heap + mem::size_of::<kernel_core::mmu::PageTable<kernel_core::mem::Kernel>>() as u64;
+
+    writeln!(
+        &mut uart,
+        "[PULL] Relocating device tree blob ({:#x?}) from {:#x} to {:#x}",
+        kernel_core::unit::Byte::new(device_tree_len),
+        device_tree_src,
+        device_tree_dst,
+    )
+    .unwrap();
+
+    unsafe {
+        core::ptr::copy(
+            device_tree_src as *const u8,
+            device_tree_dst as *mut u8,
+            device_tree_len,
+        )
+    };
+
+    let page_table_identity = unsafe {
+        ((device_tree_dst + device_tree_len as u64).next_multiple_of(1 << 16)
+            as *mut kernel_core::mmu::PageTable<kernel_core::mem::User>)
             .as_mut()
             .unwrap()
     };
@@ -226,13 +245,21 @@ fn _start_kernel(device_tree: u64) -> ! {
 
     writeln!(
         &mut uart,
-        "[PULL] Initializing page tables at {:#x?} for kernel (offset {:#x}) and {:#x?} for identity",
-        page_table_hi as *mut _, offset, page_table_lo as *mut _
+        "[PULL] Initializing kernel page table at {:#x?} (offset {:#x})",
+        page_table_kernel as *mut _, offset
     )
     .unwrap();
 
-    page_table_hi.init(offset);
-    page_table_lo.init(0);
+    page_table_kernel.init(offset);
+
+    writeln!(
+        &mut uart,
+        "[PULL] Initializing identity page table at {:#x?} (offset {:#x})",
+        page_table_identity as *mut _, 0
+    )
+    .unwrap();
+
+    page_table_identity.init(0);
 
     for segment in segments {
         if segment.p_type != elf::abi::PT_LOAD {
@@ -246,14 +273,14 @@ fn _start_kernel(device_tree: u64) -> ! {
 
         writeln!(
             &mut uart,
-            "[PULL] Copying {:?} to {:?} ({}{}{}, {:#x} file / {:#x} mem)",
-            data as *mut u8,
-            segment.p_paddr as *mut u8,
+            "[PULL] Copying {}{}{} segment ({:#x?} file / {:#x?} mem) from {:#?} to {:#?}",
             if read { "R" } else { "" },
             if write { "W" } else { "" },
             if execute { "X" } else { "" },
             kernel_core::unit::Byte::new(segment.p_filesz as usize),
             kernel_core::unit::Byte::new(segment.p_memsz as usize),
+            data as *mut u8,
+            segment.p_paddr as *mut u8,
         )
         .unwrap();
 
@@ -271,13 +298,12 @@ fn _start_kernel(device_tree: u64) -> ! {
             )
         }
 
-        for offset in (0..segment.p_memsz.next_multiple_of(1 << 16)).step_by(1 << 16) {
-            let virt_hi = Virt::<kernel_core::mem::Kernel>::new(segment.p_vaddr + offset);
-            let virt_lo = Virt::<kernel_core::mem::User>::new(segment.p_paddr + offset);
-            let phys = Phys::new(segment.p_paddr + offset);
-
-            page_table_hi.map(
-                virt_hi,
+        // Only need to identity map first page of executable to bootstrap
+        if execute {
+            let virt = Virt::<kernel_core::mem::User>::new(segment.p_paddr);
+            let phys = Phys::new(segment.p_paddr);
+            page_table_identity.map(
+                virt,
                 phys,
                 kernel_core::mmu::Attr::Normal {
                     read,
@@ -285,9 +311,14 @@ fn _start_kernel(device_tree: u64) -> ! {
                     execute,
                 },
             );
+        }
 
-            page_table_lo.map(
-                virt_lo,
+        for page in (0..segment.p_memsz.next_multiple_of(1 << 16)).step_by(1 << 16) {
+            let virt = Virt::<kernel_core::mem::Kernel>::new(segment.p_vaddr + page);
+            let phys = Phys::new(segment.p_paddr + page);
+
+            page_table_kernel.map(
+                virt,
                 phys,
                 kernel_core::mmu::Attr::Normal {
                     read,
@@ -300,8 +331,11 @@ fn _start_kernel(device_tree: u64) -> ! {
 
     writeln!(
         &mut uart,
-        "[PULL] Jumping to entry {:#x}",
+        "[PULL] Calling kernel at {:#x} with device_tree={:#x}, page_table_kernel={:#x}, heap={:#x}",
         elf.ehdr.e_entry - offset,
+        device_tree_dst + offset,
+        page_table_kernel as *mut _ as u64 + offset,
+        page_table_identity as *mut _ as u64 + offset,
     )
     .unwrap();
 
@@ -311,9 +345,11 @@ fn _start_kernel(device_tree: u64) -> ! {
         core::arch::asm! {
             "mov x0, {arg_0:x}",
             "mov x1, {arg_1:x}",
+            "mov x2, {arg_2:x}",
             "br {entry:x}",
-            arg_0 = in(reg) device_tree,
-            arg_1 = in(reg) page_table_hi as *mut _ as u64 + offset,
+            arg_0 = in(reg) device_tree_dst + offset,
+            arg_1 = in(reg) page_table_kernel as *mut _ as u64 + offset,
+            arg_2 = in(reg) page_table_identity as *mut _ as u64 + offset,
             entry = in(reg) elf.ehdr.e_entry - offset,
             options(nomem, noreturn)
         }

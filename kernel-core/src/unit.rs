@@ -1,6 +1,4 @@
 use core::fmt::Debug;
-use core::fmt::LowerHex;
-use core::marker::PhantomData;
 
 pub type Byte = Mem<0>;
 
@@ -27,47 +25,7 @@ impl<const SHIFT: usize> Mem<SHIFT> {
 impl<const SHIFT: usize> Debug for Mem<SHIFT> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let bytes = self.convert::<0>().value();
-
-        let (value, unit) = if bytes < (1 << 10) {
-            (bytes, "B")
-        } else if bytes < (1 << 20) {
-            (bytes >> 10, "KiB")
-        } else if bytes < (1 << 30) {
-            (bytes >> 20, "GiB")
-        } else if bytes < (1 << 40) {
-            (bytes >> 30, "GiB")
-        } else if bytes < (1 << 50) {
-            (bytes >> 40, "TiB")
-        } else {
-            unimplemented!()
-        };
-
-        write!(f, "{}{}", value, unit)
-    }
-}
-
-impl<const SHIFT: usize> LowerHex for Mem<SHIFT> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let bytes = self.convert::<0>().value();
-
-        let (value, unit) = if bytes < (1 << 10) {
-            (bytes, "B")
-        } else if bytes < (1 << 20) {
-            (bytes >> 10, "KiB")
-        } else if bytes < (1 << 30) {
-            (bytes >> 20, "GiB")
-        } else if bytes < (1 << 40) {
-            (bytes >> 30, "GiB")
-        } else if bytes < (1 << 50) {
-            (bytes >> 40, "TiB")
-        } else {
-            unimplemented!()
-        };
-
-        if f.alternate() {
-            write!(f, "{:#x}{}", value, unit)
-        } else {
-            write!(f, "{:x}{}", value, unit)
-        }
+        Debug::fmt(&bytes, f)?;
+        write!(f, "B")
     }
 }

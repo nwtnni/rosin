@@ -179,6 +179,11 @@ pub struct Header<'dtb> {
 
 impl Header<'_> {
     const MAGIC: u32 = 0xd00dfeed;
+
+    #[expect(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
+        u32::from(self.total_size) as usize
+    }
 }
 
 #[derive(Debug)]

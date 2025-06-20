@@ -1,6 +1,5 @@
 __TEXT = 0x8 << 16;
 __TEXT_LO = 1 << 28;
-__ELF = 1 << 29;
 
 ENTRY(__TEXT)
 

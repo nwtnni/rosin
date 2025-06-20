@@ -3,8 +3,13 @@ name = "chainload-pull"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+qemu = []
+
 [dependencies]
 aarch64-cpu.workspace = true
+device-tree.workspace = true
 elf.workspace = true
 kernel-core.workspace = true
 tock-registers.workspace = true

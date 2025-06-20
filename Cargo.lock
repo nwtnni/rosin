@@ -90,6 +90,7 @@ name = "chainload-pull"
 version = "0.1.0"
 dependencies = [
  "aarch64-cpu",
+ "device-tree",
  "elf",
  "kernel-core",
  "tock-registers",

@@ -69,6 +69,7 @@ impl<S: crate::mem::AddressSpace> PageTable<S> {
         match offset {
             0 => TTBR0_EL1.set_baddr(self.l2.as_ptr() as u64),
             _ => {
+                // Make page table itself accessible
                 for (virt, phys) in (self as *mut _ as u64..)
                     .step_by(1 << 16)
                     .take(self.l3.len() + 1)
