@@ -4,7 +4,7 @@
 pub mod print;
 
 pub mod device;
-pub mod irq;
+pub mod interrupt;
 pub mod mem;
 pub mod mmu;
 mod sync;
@@ -52,7 +52,7 @@ pub fn init() {
     //     // bcm2837b0::clock::Clock::new(0x4000_0000).init();
     //
     unsafe {
-        irq::init();
+        interrupt::init();
     }
     // }
 }
