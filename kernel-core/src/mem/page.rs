@@ -22,12 +22,16 @@ impl Allocator {
         Self([0; 256])
     }
 
-    pub fn reserve(&mut self, id: Id) {
+    pub fn clear_mut(&mut self) {
+        self.0.fill(0);
+    }
+
+    pub fn reserve_mut(&mut self, id: Id) {
         let (i, j) = Self::id_to_index(id);
         self.0[i] |= 1 << j;
     }
 
-    pub fn allocate(&mut self) -> Option<Id> {
+    pub fn allocate_mut(&mut self) -> Option<Id> {
         let (i, j) =
             self.0
                 .iter()
@@ -38,11 +42,11 @@ impl Allocator {
                 })?;
 
         let id = Id(i as u64 * 64 + j as u64);
-        self.reserve(id);
+        self.reserve_mut(id);
         Some(id)
     }
 
-    pub fn deallocate(&mut self, id: Id) {
+    pub fn deallocate_mut(&mut self, id: Id) {
         let (i, j) = Self::id_to_index(id);
 
         assert!(self.0[i] & (1 << j) > 0, "Double free at page {:?}", id,);

@@ -133,7 +133,7 @@ impl<S: crate::mem::AddressSpace> PageTable<S> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Attr {
     Device,
     Normal {
