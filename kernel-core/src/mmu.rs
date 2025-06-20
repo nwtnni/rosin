@@ -3,6 +3,7 @@ use core::ops::Deref;
 use core::ops::DerefMut;
 
 use aarch64_cpu::registers::MAIR_EL1;
+use aarch64_cpu::registers::Readable as _;
 use aarch64_cpu::registers::TCR_EL1;
 use aarch64_cpu::registers::TTBR0_EL1;
 use aarch64_cpu::registers::TTBR1_EL1;
@@ -49,14 +50,6 @@ pub fn init() {
 
 impl<S: crate::mem::AddressSpace> PageTable<S> {
     pub fn init(&mut self, offset: u64) {
-        for (l2, l3) in self.l2.iter_mut().zip(&self.l3) {
-            l2.write(
-                table::TYPE::Table
-                    + table::VALID::Valid
-                    + table::NEXT.val((l3.as_ptr() as u64) >> 16),
-            )
-        }
-
         // FIXME: set up device MMIO in kernel
         for (virt, phys) in (0x3F00_0000..0x4001_0000)
             .step_by(1 << 16)
@@ -93,11 +86,19 @@ impl<S: crate::mem::AddressSpace> PageTable<S> {
     }
 
     pub fn map(&mut self, virt: crate::mem::Virt<S>, phys: crate::mem::Phys, attr: Attr) {
-        let index_l2 = u64::from(virt) >> 29 & ((1 << 3) - 1);
-        let index_l3 = (u64::from(virt) >> 16) & ((1 << 13) - 1);
+        let index_l2 = (u64::from(virt) >> 29 & ((1 << 3) - 1)) as usize;
+        let index_l3 = ((u64::from(virt) >> 16) & ((1 << 13) - 1)) as usize;
 
-        let entry = &mut self.l3[index_l2 as usize][index_l3 as usize];
+        let table = &mut self.l2[index_l2];
+        if !table.is_set(table::VALID) {
+            table.write(
+                table::TYPE::Table
+                    + table::VALID::Valid
+                    + table::NEXT.val((self.l3[index_l2].as_ptr() as u64) >> 16),
+            )
+        }
 
+        let page = &mut self.l3[index_l2][index_l3];
         let mut flags = page::AF::True
             + page::TYPE::Page
             + page::VALID::True
@@ -128,7 +129,7 @@ impl<S: crate::mem::AddressSpace> PageTable<S> {
             }
         }
 
-        entry.write(flags);
+        page.write(flags);
     }
 }
 
