@@ -80,9 +80,7 @@ unsafe extern "C" fn _start_kernel(
 
     info!("Device tree header: {:#x?}", device_tree.header());
 
-    for node in device_tree.nodes() {
-        recurse(0, node);
-    }
+    recurse(0, device_tree.root());
 
     for _ in 0..2 {
         info!("Sleeping for 1s...",);

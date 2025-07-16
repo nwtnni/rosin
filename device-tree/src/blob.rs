@@ -2,6 +2,7 @@
 
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use core::ops::Deref;
 use core::ptr::NonNull;
 
 use crate::Be32;
@@ -29,7 +30,7 @@ impl<'dtb> Blob<'dtb> {
         unsafe { self.as_ptr().cast::<Header>().as_ref() }
     }
 
-    pub fn nodes(&self) -> NodeIter {
+    pub fn root(&self) -> Node {
         let struct_offset = u32::from(self.header().off_dt_struct);
         let walk = unsafe {
             self.as_ptr()
@@ -38,6 +39,8 @@ impl<'dtb> Blob<'dtb> {
         };
 
         NodeIter(Cursor { dtb: self, walk })
+            .next()
+            .expect("Missing root node")
     }
 
     fn str_offset(&self, offset: u32) -> &'dtb str {
@@ -60,6 +63,7 @@ impl<'dtb> Blob<'dtb> {
             .expect("Invalid UTF-8 in device tree")
     }
 
+    #[expect(unused)]
     fn str_slice(slice: &'dtb [u8]) -> &'dtb str {
         let Some((0, slice)) = slice.split_last() else {
             panic!("Malformed device tree string: {:?}", slice);
@@ -70,6 +74,43 @@ impl<'dtb> Blob<'dtb> {
 
     pub fn as_ptr(&self) -> NonNull<u8> {
         NonNull::from(self.0).cast::<u8>()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Root<'dtb>(Node<'dtb>);
+
+impl<'dtb> Deref for Root<'dtb> {
+    type Target = Node<'dtb>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'dtb> Root<'dtb> {
+    pub fn aliases(&self) -> PropIter<'dtb> {
+        let mut cursor = self.0.cursor.clone();
+        cursor.seek_child(|name| name == "aliases");
+        cursor.next();
+        PropIter(cursor)
+    }
+
+    pub fn memory(&self) -> Node<'dtb> {
+        let mut cursor = self.0.cursor.clone();
+        cursor.seek_child(|name| name == "memory");
+        NodeIter(cursor).next().expect("Missing /memory node")
+    }
+
+    pub fn reserved_memory(&self) -> Option<Node<'dtb>> {
+        let mut cursor = self.0.cursor.clone();
+        cursor.seek_child(|name| name == "memory");
+        NodeIter(cursor).next()
+    }
+
+    pub fn cpus(&self) -> Node<'dtb> {
+        let mut cursor = self.0.cursor.clone();
+        cursor.seek_child(|name| name == "cpus");
+        NodeIter(cursor).next().expect("Missing /cpus node")
     }
 }
 
@@ -106,13 +147,21 @@ impl<'dtb> Node<'dtb> {
         self.phandle
     }
 
+    pub fn address_cells(&self) -> u32 {
+        self.address_cells
+    }
+
+    pub fn size_cells(&self) -> u32 {
+        self.size_cells
+    }
+
     pub fn props(&self) -> PropIter<'dtb> {
         PropIter(self.cursor.clone())
     }
 
     pub fn children(&self) -> NodeIter<'dtb> {
         let mut cursor = self.cursor.clone();
-        cursor.seek_begin();
+        cursor.seek_child(|_| true);
         NodeIter(cursor)
     }
 }
@@ -138,7 +187,6 @@ impl<'dtb> Iterator for NodeIter<'dtb> {
             .clone()
             .find_prop("compatible")
             .map(StrList::new)
-            // .expect("Missing compatible prop");
             .unwrap_or(StrList::new(&[]));
 
         let phandle = self
@@ -146,8 +194,7 @@ impl<'dtb> Iterator for NodeIter<'dtb> {
             .clone()
             .find_prop("phandle")
             .map(|value| u32::from_be_bytes(value.try_into().expect("Invalid phandle prop")))
-            // .expect("Missing phandle property")
-            .unwrap_or(0);
+            .unwrap_or(u32::MAX);
 
         let address_cells = self
             .0
@@ -163,27 +210,17 @@ impl<'dtb> Iterator for NodeIter<'dtb> {
             .map(|value| u32::from_be_bytes(value.try_into().expect("Invalid #size-cells prop")))
             .unwrap_or(1);
 
-        let next = Some(Node {
+        let next = Node {
             name,
             compatible,
             phandle,
             address_cells,
             size_cells,
             cursor: self.0.clone(),
-        });
+        };
 
-        let mut depth = 0usize;
-        loop {
-            match self.0.next() {
-                None => unreachable!(),
-                Some(Token::End) if depth == 0 => {
-                    return next;
-                }
-                Some(Token::Begin { .. }) => depth += 1,
-                Some(Token::End) => depth = depth.checked_sub(1).unwrap(),
-                Some(Token::Prop { .. }) => (),
-            }
-        }
+        self.0.seek_sibling();
+        Some(next)
     }
 }
 
@@ -206,7 +243,7 @@ struct Cursor<'dtb> {
 }
 
 impl<'dtb> Cursor<'dtb> {
-    fn find_prop(&mut self, name: &'dtb str) -> Option<&'dtb [u8]> {
+    fn find_prop(&mut self, name: &str) -> Option<&'dtb [u8]> {
         self.take_while(|token| matches!(token, Token::Prop { .. }))
             .find_map(|token| match token {
                 Token::Prop(prop) if prop.name == name => Some(prop.value),
@@ -214,14 +251,34 @@ impl<'dtb> Cursor<'dtb> {
             })
     }
 
-    fn seek_begin(&mut self) {
+    fn seek_child<F: FnMut(&'dtb str) -> bool>(&mut self, mut filter: F) {
+        let mut depth = 0usize;
         loop {
             match self.peek() {
-                Some(Token::Begin { .. }) | None => return,
-                Some(Token::End) => unreachable!(),
-                Some(Token::Prop(_)) => {
-                    self.next();
+                Some(Token::Begin { name }) if depth == 0 && filter(name) => return,
+                Some(Token::Begin { .. }) => depth += 1,
+                None => {
+                    assert_eq!(depth, 0);
+                    return;
                 }
+                Some(Token::End) if depth == 0 => return,
+                Some(Token::End) => depth -= 1,
+                Some(Token::Prop(_)) => (),
+            }
+
+            self.next();
+        }
+    }
+
+    fn seek_sibling(&mut self) {
+        let mut depth = 0usize;
+        loop {
+            match self.next() {
+                None => return,
+                Some(Token::End) if depth == 0 => return,
+                Some(Token::Begin { .. }) => depth += 1,
+                Some(Token::End) => depth = depth.checked_sub(1).unwrap(),
+                Some(Token::Prop { .. }) => (),
             }
         }
     }
