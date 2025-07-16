@@ -48,15 +48,14 @@ _start:
 unsafe extern "C" fn _start_kernel(
     device_tree: u64,
     page_table: *mut kernel_core::mmu::PageTable<kernel_core::mem::Kernel>,
-    page_allocator: &kernel_core::mem::page::Allocator,
 ) -> ! {
     kernel_core::init();
 
     info!("Hello, world!");
 
     info!(
-        "device_tree={:#x}, page_table={:#x?}, page_allocator={:#x?}",
-        device_tree, page_table, page_allocator as *const _
+        "device_tree={:#x}, page_table={:#x?}",
+        device_tree, page_table
     );
 
     info!(

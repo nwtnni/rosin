@@ -213,19 +213,12 @@ fn _start_kernel(device_tree: u64) -> ! {
             .unwrap()
     };
 
-    let allocator_len = mem::size_of::<kernel_core::mem::page::Allocator>() as u64;
-    let allocator = unsafe {
-        ((heap + page_table_len) as *mut kernel_core::mem::page::Allocator)
-            .as_mut()
-            .unwrap()
-    };
-
     let device_tree_len =
         unsafe { device_tree::Blob::from_ptr(NonNull::new(device_tree as *mut u8).unwrap()) }
             .header()
             .len();
     let device_tree_src = device_tree;
-    let device_tree_dst = (heap + page_table_len + allocator_len).next_multiple_of(1 << 16);
+    let device_tree_dst = (heap + page_table_len).next_multiple_of(1 << 16);
 
     let page_table_identity = unsafe {
         ((device_tree_dst + device_tree_len as u64).next_multiple_of(1 << 16)
@@ -251,17 +244,6 @@ fn _start_kernel(device_tree: u64) -> ! {
         )
     };
 
-    writeln!(
-        &mut uart,
-        "[PULL] Initializing page allocator at {:#x?}",
-        allocator as *mut _,
-    )
-    .unwrap();
-
-    allocator.clear_mut();
-    reserve(allocator, allocator as *const _);
-    reserve_unsized(allocator, device_tree_dst, device_tree_len as u64);
-
     kernel_core::mmu::init();
 
     writeln!(
@@ -272,7 +254,6 @@ fn _start_kernel(device_tree: u64) -> ! {
     .unwrap();
 
     page_table_kernel.init(offset);
-    reserve(allocator, page_table_kernel);
 
     writeln!(
         &mut uart,
@@ -339,8 +320,6 @@ fn _start_kernel(device_tree: u64) -> ! {
             )
         }
 
-        reserve_unsized(allocator, segment.p_paddr, segment.p_memsz);
-
         // Only need to identity map first page of executable to bootstrap
         if execute {
             map(
@@ -377,11 +356,9 @@ fn _start_kernel(device_tree: u64) -> ! {
         core::arch::asm! {
             "mov x0, {arg_0:x}",
             "mov x1, {arg_1:x}",
-            "mov x2, {arg_2:x}",
             "br {entry:x}",
             arg_0 = in(reg) device_tree_dst + offset,
             arg_1 = in(reg) page_table_kernel as *mut _ as u64 + offset,
-            arg_2 = in(reg) allocator as *mut _ as u64 + offset,
             entry = in(reg) elf.ehdr.e_entry - offset,
             options(nomem, noreturn)
         }
@@ -401,19 +378,6 @@ fn map<S: kernel_core::mem::AddressSpace>(
         .map(|phys| (phys + offset, phys))
         .map(|(virt, phys)| (Virt::new(virt), Phys::new(phys)))
         .for_each(|(virt, phys)| page_table.map(virt, phys, attr))
-}
-
-fn reserve<T>(allocator: &mut kernel_core::mem::page::Allocator, phys: *const T) {
-    reserve_unsized(allocator, phys as u64, mem::size_of::<T>() as u64)
-}
-
-fn reserve_unsized(allocator: &mut kernel_core::mem::page::Allocator, phys: u64, len: u64) {
-    (0..len)
-        .step_by(1 << 16)
-        .map(|offset| phys + offset)
-        .map(Phys::new)
-        .map(kernel_core::mem::page::Id::from)
-        .for_each(|page| allocator.reserve_mut(page))
 }
 
 #[panic_handler]

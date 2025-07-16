@@ -3,6 +3,7 @@
 #[macro_use]
 pub mod print;
 
+pub mod bitset;
 pub mod device;
 pub mod interrupt;
 pub mod mem;
