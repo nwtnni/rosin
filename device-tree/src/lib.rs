@@ -19,13 +19,13 @@ pub struct Reservation {
 }
 
 #[derive(Clone)]
-pub struct RangeList<'dtb> {
+pub struct RangeIter<'dtb> {
     address_bytes: u64,
     size_bytes: u64,
     data: &'dtb [u8],
 }
 
-impl<'dtb> RangeList<'dtb> {
+impl<'dtb> RangeIter<'dtb> {
     pub(crate) fn new(address_bytes: u64, size_bytes: u64, data: &'dtb [u8]) -> Self {
         Self {
             address_bytes,
@@ -48,7 +48,7 @@ impl<'dtb> RangeList<'dtb> {
     }
 }
 
-impl Debug for RangeList<'_> {
+impl Debug for RangeIter<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
@@ -72,13 +72,13 @@ impl Debug for Range {
 }
 
 #[derive(Clone)]
-pub struct RegList<'dtb> {
+pub struct RegIter<'dtb> {
     address_bytes: u64,
     size_bytes: u64,
     data: &'dtb [u8],
 }
 
-impl<'dtb> RegList<'dtb> {
+impl<'dtb> RegIter<'dtb> {
     pub(crate) fn new(address_bytes: u64, size_bytes: u64, data: &'dtb [u8]) -> Self {
         Self {
             address_bytes,
@@ -99,7 +99,7 @@ impl<'dtb> RegList<'dtb> {
     }
 }
 
-impl Debug for RegList<'_> {
+impl Debug for RegIter<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
@@ -124,9 +124,9 @@ impl Debug for Reg {
 }
 
 #[derive(Clone)]
-pub struct StrList<'dtb>(&'dtb [u8]);
+pub struct StrIter<'dtb>(&'dtb [u8]);
 
-impl<'dtb> StrList<'dtb> {
+impl<'dtb> StrIter<'dtb> {
     pub(crate) fn new(data: &'dtb [u8]) -> Self {
         Self(data)
     }
@@ -140,7 +140,7 @@ impl<'dtb> StrList<'dtb> {
     }
 }
 
-impl Debug for StrList<'_> {
+impl Debug for StrIter<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }

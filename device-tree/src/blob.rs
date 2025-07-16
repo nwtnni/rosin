@@ -7,7 +7,7 @@ use core::ptr::NonNull;
 
 use crate::Be32;
 use crate::Prop;
-use crate::StrList;
+use crate::StrIter;
 
 pub struct Blob<'dtb>(&'dtb [u8]);
 
@@ -117,7 +117,7 @@ impl<'dtb> Root<'dtb> {
 #[derive(Clone)]
 pub struct Node<'dtb> {
     name: &'dtb str,
-    compatible: StrList<'dtb>,
+    compatible: StrIter<'dtb>,
     phandle: u32,
     address_cells: u32,
     size_cells: u32,
@@ -139,7 +139,7 @@ impl<'dtb> Node<'dtb> {
         self.name
     }
 
-    pub fn compatible(&self) -> StrList<'dtb> {
+    pub fn compatible(&self) -> StrIter<'dtb> {
         self.compatible.clone()
     }
 
@@ -186,8 +186,8 @@ impl<'dtb> Iterator for NodeIter<'dtb> {
             .0
             .clone()
             .find_prop("compatible")
-            .map(StrList::new)
-            .unwrap_or(StrList::new(&[]));
+            .map(StrIter::new)
+            .unwrap_or(StrIter::new(&[]));
 
         let phandle = self
             .0
