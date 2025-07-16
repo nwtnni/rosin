@@ -4,11 +4,8 @@ use core::fmt::Debug;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use arrayvec::ArrayVec;
-
 use crate::Be32;
-use crate::RangeList;
-use crate::RegList;
+use crate::Prop;
 use crate::StrList;
 
 pub struct Blob<'dtb>(&'dtb [u8]);
@@ -32,60 +29,15 @@ impl<'dtb> Blob<'dtb> {
         unsafe { self.as_ptr().cast::<Header>().as_ref() }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = Token<'dtb>> {
-        let structs = u32::from(self.header().off_dt_struct);
-        let mut walk = unsafe { self.as_ptr().byte_add(structs as usize).cast::<Be32>() };
-        let mut done = false;
-        let mut stack = ArrayVec::<Context, 16>::new();
+    pub fn nodes(&self) -> NodeIter {
+        let struct_offset = u32::from(self.header().off_dt_struct);
+        let walk = unsafe {
+            self.as_ptr()
+                .byte_add(struct_offset as usize)
+                .cast::<Be32>()
+        };
 
-        core::iter::from_fn(move || {
-            if done {
-                return None;
-            }
-
-            loop {
-                let (next, len) = match u32::from(unsafe { walk.read() }) {
-                    1 => unsafe {
-                        let name = Self::str_pointer(walk.add(1).cast::<u8>());
-                        let aligned = (name.len() + 1 + 3) >> 2;
-                        stack.push(Context::default());
-                        (Some(Token::Begin { name }), 1 + aligned)
-                    },
-                    2 => {
-                        stack.pop();
-                        (Some(Token::End), 1)
-                    }
-                    3 => unsafe {
-                        let len = u32::from(walk.add(1).read()) as usize;
-                        let nameoff = u32::from(walk.add(2).read());
-
-                        let name = self.str_offset(nameoff);
-                        let value =
-                            core::slice::from_raw_parts(walk.add(3).cast::<u8>().as_ptr(), len);
-
-                        let aligned = (len + 3) >> 2;
-                        (
-                            Some(Token::Prop(Prop::new(&mut stack, name, value))),
-                            3 + aligned,
-                        )
-                    },
-                    4 => (None, 1),
-                    9 => {
-                        done = true;
-                        return None;
-                    }
-                    unknown => unreachable!("Unknown token: {:#x}", unknown),
-                };
-
-                unsafe {
-                    walk = walk.add(len);
-                }
-
-                if let Some(next) = next {
-                    break Some(next);
-                }
-            }
-        })
+        NodeIter(Cursor { dtb: self, walk })
     }
 
     fn str_offset(&self, offset: u32) -> &'dtb str {
@@ -118,6 +70,212 @@ impl<'dtb> Blob<'dtb> {
 
     pub fn as_ptr(&self) -> NonNull<u8> {
         NonNull::from(self.0).cast::<u8>()
+    }
+}
+
+#[derive(Clone)]
+pub struct Node<'dtb> {
+    name: &'dtb str,
+    compatible: StrList<'dtb>,
+    phandle: u32,
+    address_cells: u32,
+    size_cells: u32,
+    // Positioned at first property within node
+    cursor: Cursor<'dtb>,
+}
+
+impl<'dtb> core::fmt::Debug for Node<'dtb> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct(self.name)
+            .field("compatible", &self.compatible)
+            .field("phandle", &self.phandle)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'dtb> Node<'dtb> {
+    pub fn name(&self) -> &'dtb str {
+        self.name
+    }
+
+    pub fn compatible(&self) -> StrList<'dtb> {
+        self.compatible.clone()
+    }
+
+    pub fn phandle(&self) -> u32 {
+        self.phandle
+    }
+
+    pub fn props(&self) -> PropIter<'dtb> {
+        PropIter(self.cursor.clone())
+    }
+
+    pub fn children(&self) -> NodeIter<'dtb> {
+        let mut cursor = self.cursor.clone();
+        cursor.seek_begin();
+        NodeIter(cursor)
+    }
+}
+
+// Invariant: cursor always positioned at `Token::Begin` or `Token::End`
+pub struct NodeIter<'dtb>(Cursor<'dtb>);
+
+impl<'dtb> Iterator for NodeIter<'dtb> {
+    type Item = Node<'dtb>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let name = match self.0.peek()? {
+            Token::Begin { name } => {
+                self.0.next();
+                name
+            }
+            Token::Prop { .. } => unreachable!(),
+            Token::End => return None,
+        };
+
+        let compatible = self
+            .0
+            .clone()
+            .find_prop("compatible")
+            .map(StrList::new)
+            // .expect("Missing compatible prop");
+            .unwrap_or(StrList::new(&[]));
+
+        let phandle = self
+            .0
+            .clone()
+            .find_prop("phandle")
+            .map(|value| u32::from_be_bytes(value.try_into().expect("Invalid phandle prop")))
+            // .expect("Missing phandle property")
+            .unwrap_or(0);
+
+        let address_cells = self
+            .0
+            .clone()
+            .find_prop("#address-cells")
+            .map(|value| u32::from_be_bytes(value.try_into().expect("Invalid #address-cells prop")))
+            .unwrap_or(2);
+
+        let size_cells = self
+            .0
+            .clone()
+            .find_prop("#size-cells")
+            .map(|value| u32::from_be_bytes(value.try_into().expect("Invalid #size-cells prop")))
+            .unwrap_or(1);
+
+        let next = Some(Node {
+            name,
+            compatible,
+            phandle,
+            address_cells,
+            size_cells,
+            cursor: self.0.clone(),
+        });
+
+        let mut depth = 0usize;
+        loop {
+            match self.0.next() {
+                None => unreachable!(),
+                Some(Token::End) if depth == 0 => {
+                    return next;
+                }
+                Some(Token::Begin { .. }) => depth += 1,
+                Some(Token::End) => depth = depth.checked_sub(1).unwrap(),
+                Some(Token::Prop { .. }) => (),
+            }
+        }
+    }
+}
+
+pub struct PropIter<'dtb>(Cursor<'dtb>);
+
+impl<'dtb> Iterator for PropIter<'dtb> {
+    type Item = Prop<'dtb>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.peek()? {
+            Token::Begin { .. } | Token::End => None,
+            Token::Prop(prop) => Some(prop),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Cursor<'dtb> {
+    dtb: &'dtb Blob<'dtb>,
+    walk: NonNull<Be32>,
+}
+
+impl<'dtb> Cursor<'dtb> {
+    fn find_prop(&mut self, name: &'dtb str) -> Option<&'dtb [u8]> {
+        self.take_while(|token| matches!(token, Token::Prop { .. }))
+            .find_map(|token| match token {
+                Token::Prop(prop) if prop.name == name => Some(prop.value),
+                Token::Begin { .. } | Token::Prop { .. } | Token::End => None,
+            })
+    }
+
+    fn seek_begin(&mut self) {
+        loop {
+            match self.peek() {
+                Some(Token::Begin { .. }) | None => return,
+                Some(Token::End) => unreachable!(),
+                Some(Token::Prop(_)) => {
+                    self.next();
+                }
+            }
+        }
+    }
+
+    fn peek(&self) -> Option<Token<'dtb>> {
+        self.peek_full().and_then(|(token, _)| token)
+    }
+
+    fn peek_full(&self) -> Option<(Option<Token<'dtb>>, usize)> {
+        let (next, len) = match u32::from(unsafe { self.walk.read() }) {
+            1 => unsafe {
+                let name = Blob::str_pointer(self.walk.add(1).cast::<u8>());
+                let aligned = (name.len() + 1 + 3) >> 2;
+                (Some(Token::Begin { name }), 1 + aligned)
+            },
+            2 => (Some(Token::End), 1),
+            3 => unsafe {
+                let len = u32::from(self.walk.add(1).read()) as usize;
+                let nameoff = u32::from(self.walk.add(2).read());
+
+                let name = self.dtb.str_offset(nameoff);
+                let value =
+                    core::slice::from_raw_parts(self.walk.add(3).cast::<u8>().as_ptr(), len);
+
+                let aligned = len.next_multiple_of(4) / 4;
+                (Some(Token::Prop(Prop { name, value })), 3 + aligned)
+            },
+            4 => (None, 1),
+            9 => {
+                return None;
+            }
+            unknown => unreachable!("Unknown token: {:#x}", unknown),
+        };
+
+        Some((next, len))
+    }
+}
+
+impl<'dtb> Iterator for Cursor<'dtb> {
+    type Item = Token<'dtb>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Loop to skip past empty tokens
+        loop {
+            let (next, len) = self.peek_full()?;
+
+            unsafe {
+                self.walk = self.walk.add(len);
+            }
+
+            if let Some(next) = next {
+                break Some(next);
+            }
+        }
     }
 }
 
@@ -186,96 +344,9 @@ impl Header<'_> {
     }
 }
 
-#[derive(Debug)]
-struct Context {
-    address_cells: u32,
-    size_cells: u32,
-}
-
-impl Default for Context {
-    fn default() -> Self {
-        Self {
-            address_cells: 8,
-            size_cells: 4,
-        }
-    }
-}
-
+#[derive(Clone)]
 pub enum Token<'dtb> {
     Begin { name: &'dtb str },
     Prop(Prop<'dtb>),
     End,
-}
-
-pub enum Prop<'dtb> {
-    Compatible(StrList<'dtb>),
-    Model(&'dtb str),
-    AddressCells(u32),
-    SizeCells(u32),
-    Reg(RegList<'dtb>),
-    Ranges(RangeList<'dtb>),
-    Any { name: &'dtb str, value: &'dtb [u8] },
-}
-
-impl<'dtb> Prop<'dtb> {
-    fn new(context: &mut [Context], name: &'dtb str, value: &'dtb [u8]) -> Self {
-        match name {
-            "compatible" => Prop::Compatible(StrList::new(value)),
-            "model" => Prop::Model(Blob::str_slice(value)),
-            "#address-cells" => {
-                let address = u32::from_be_bytes(value.try_into().unwrap());
-                context.last_mut().unwrap().address_cells = address;
-                Prop::AddressCells(address)
-            }
-            "#size-cells" => {
-                let size = u32::from_be_bytes(value.try_into().unwrap());
-                context.last_mut().unwrap().size_cells = size;
-                Prop::SizeCells(size)
-            }
-            "reg" => {
-                let parent = &context[context.len() - 2];
-                Prop::Reg(RegList::new(
-                    parent.address_cells as u64 * 4,
-                    parent.size_cells as u64 * 4,
-                    value,
-                ))
-            }
-            "ranges" => {
-                let parent = &context[context.len() - 2];
-                Prop::Ranges(RangeList::new(
-                    parent.address_cells as u64 * 4,
-                    parent.size_cells as u64 * 4,
-                    value,
-                ))
-            }
-            name => Prop::Any { name, value },
-        }
-    }
-}
-
-impl Debug for Prop<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let name = match self {
-            Prop::Compatible(_) => "compatible",
-            Prop::Model(_) => "model",
-            Prop::AddressCells(_) => "#address-cells",
-            Prop::SizeCells(_) => "#size-cells",
-            Prop::Reg(_) => "reg",
-            Prop::Ranges(_) => "ranges",
-            Prop::Any { name, value: _ } => name,
-        };
-
-        write!(f, "{}: ", name)?;
-
-        match self {
-            Prop::Compatible(strings) => write!(f, "{:?}", strings),
-            Prop::Model(model) => write!(f, "{}", model),
-            Prop::AddressCells(cells) | Prop::SizeCells(cells) => write!(f, "{:?}", cells),
-            Prop::Reg(reg) => write!(f, "{:?}", reg),
-            Prop::Ranges(ranges) => write!(f, "{:?}", ranges),
-            Prop::Any { name: _, value } => {
-                write!(f, "{:?}", value)
-            }
-        }
-    }
 }

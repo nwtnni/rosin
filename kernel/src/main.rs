@@ -80,18 +80,8 @@ unsafe extern "C" fn _start_kernel(
 
     info!("Device tree header: {:#x?}", device_tree.header());
 
-    let mut indent = 0;
-    for token in device_tree.iter() {
-        match token {
-            device_tree::blob::Token::Begin { name } => {
-                info!("{:|<width$}{}", "", name, width = indent * 2);
-                indent += 1;
-            }
-            device_tree::blob::Token::Prop(prop) => {
-                info!("{:|<width$}-{:?}", "", prop, width = indent * 2)
-            }
-            device_tree::blob::Token::End => indent -= 1,
-        }
+    for node in device_tree.nodes() {
+        recurse(0, node);
     }
 
     for _ in 0..2 {
@@ -103,6 +93,13 @@ unsafe extern "C" fn _start_kernel(
     loop {
         let byte = unsafe { device::bcm2837b0::mini::Uart::new(0x3F21_5000) }.read_byte();
         print!("{}", byte as char);
+    }
+}
+
+fn recurse(depth: usize, node: device_tree::blob::Node) {
+    info!("{:|<depth$}{:?}", "", node, depth = depth);
+    for child in node.children() {
+        recurse(depth + 1, child);
     }
 }
 

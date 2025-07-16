@@ -5,6 +5,12 @@ use core::fmt::Debug;
 pub mod blob;
 pub use blob::Blob;
 
+#[derive(Copy, Clone, Debug)]
+pub struct Prop<'dtb> {
+    name: &'dtb str,
+    value: &'dtb [u8],
+}
+
 #[repr(C, align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct Reservation {
