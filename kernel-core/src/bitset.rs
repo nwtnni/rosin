@@ -8,6 +8,26 @@ pub struct Sized<const LEN: usize>([AtomicU64; LEN]);
 
 macro_rules! impl_bit_set {
     () => {
+        #[allow(clippy::len_without_is_empty)]
+        pub fn len(&self) -> usize {
+            self.0.len() * 64
+        }
+
+        pub fn count_ones_mut(&mut self) -> usize {
+            self.0
+                .iter_mut()
+                .map(AtomicU64::get_mut)
+                .map(|chunk| chunk.count_ones() as usize)
+                .sum()
+        }
+
+        pub fn fill_mut(&mut self) {
+            self.0
+                .iter_mut()
+                .map(AtomicU64::get_mut)
+                .for_each(|chunk| *chunk = u64::MAX);
+        }
+
         pub fn clear_mut(&mut self) {
             self.0
                 .iter_mut()
@@ -71,6 +91,10 @@ impl Unsized {
                 len,
             ))
         }
+    }
+
+    pub const fn size_of(len: usize) -> usize {
+        core::mem::size_of::<AtomicU64>() * len
     }
 
     impl_bit_set!();

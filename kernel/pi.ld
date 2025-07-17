@@ -15,6 +15,7 @@ PHDRS {
 
 SECTIONS {
     . = __KERNEL_VIRT;
+    __KERNEL_LO = .;
 
     .text : AT(__KERNEL_PHYS) {
         KEEP(*(.text.boot))
@@ -52,6 +53,7 @@ SECTIONS {
     } :segment_rw
 
     . = ALIGN(PAGE_SIZE);
+    __KERNEL_HI = .;
 
     ASSERT(SIZEOF(.got) == 0, "Unexpected relocation")
 

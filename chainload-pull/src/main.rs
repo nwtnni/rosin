@@ -193,7 +193,6 @@ fn _start_kernel(device_tree: u64) -> ! {
 
     let heap = segments
         .iter()
-        .filter(|segment| segment.p_type == elf::abi::PT_LOAD)
         .map(|segment| segment.p_paddr + segment.p_memsz)
         .map(|address| address.next_multiple_of(1 << 16))
         .max()
@@ -213,10 +212,13 @@ fn _start_kernel(device_tree: u64) -> ! {
             .unwrap()
     };
 
-    let device_tree_len =
-        unsafe { device_tree::Blob::from_ptr(NonNull::new(device_tree as *mut u8).unwrap()) }
-            .header()
-            .len();
+    let device_tree_len = unsafe {
+        device_tree::Blob::from_ptr(
+            NonNull::new(device_tree as *mut device_tree::blob::Header).unwrap(),
+        )
+    }
+    .header()
+    .len();
     let device_tree_src = device_tree;
     let device_tree_dst = (heap + page_table_len).next_multiple_of(1 << 16);
 
@@ -356,9 +358,11 @@ fn _start_kernel(device_tree: u64) -> ! {
         core::arch::asm! {
             "mov x0, {arg_0:x}",
             "mov x1, {arg_1:x}",
+            "mov x2, {arg_2:x}",
             "br {entry:x}",
             arg_0 = in(reg) device_tree_dst + offset,
             arg_1 = in(reg) page_table_kernel as *mut _ as u64 + offset,
+            arg_2 = in(reg) (device_tree_dst + device_tree_len as u64 + offset).next_multiple_of(1 << 16),
             entry = in(reg) elf.ehdr.e_entry - offset,
             options(nomem, noreturn)
         }
